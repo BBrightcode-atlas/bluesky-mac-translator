@@ -533,6 +533,10 @@ type Settings = {
 │ apfel 엔드포인트                             │
 │ [http://127.0.0.1:11434]   [기본값으로]      │
 │                                             │
+│ apfel 자동 재시작                            │
+│ [✓] 서버가 죽으면 자동으로 다시 시작          │
+│     (로컬 엔드포인트일 때만 적용)             │
+│                                             │
 ├─────────────────────────────────────────────┤
 │ 🟢 Server status                            │
 │  apfel 서버: 실행 중 (PID 31204, port 11434) │
@@ -551,10 +555,13 @@ Server status는 NMH `{type:'status'}`를 3초 polling.
 
 MVP에서 안 함. bsky 글이 짧고 코드/이모지/멘션 섞여 휴리스틱 신뢰도 낮음. apfel은 source 자동 감지, 같은 언어로 요청해도 거의 무해.
 
-### 8.5 동시성
+### 8.6 `apfelEndpoint`과 NMH의 관계
 
-- post당 in-flight 1개 (재클릭 시 기존 abort)
-- 전체 동시 요청 4개 cap (4개 초과 시 queue)
+- 기본값 `http://127.0.0.1:11434` → **로컬 모드**: NMH가 `apfel --serve` lifecycle을 통제 (spawn/health/restart)
+- 사용자가 비-localhost로 변경하면 → **원격 모드**: NMH의 spawn/restart 로직은 자동 비활성 (헬스체크는 사용자 정보용으로만 endpoint를 핑)
+- 모드 판정: URL hostname이 `127.0.0.1` / `localhost` / `::1`이면 로컬, 그 외 원격
+- 원격 모드에서는 `autoRestartServer` 설정이 자동으로 의미 없음 (UI에 "(로컬 엔드포인트일 때만 적용)" 안내)
+- 인증/TLS가 필요한 원격 시나리오는 MVP 범위 외 (§12 참조)
 
 ---
 
@@ -681,7 +688,7 @@ curl -fsSL https://raw.githubusercontent.com/flotter-atlas/bluesky-mac-translato
 | 레이어 | 도구 | 대상 |
 |---|---|---|
 | 타입 체크 | `tsc --noEmit` | extension + host |
-| Lint | `biome` 또는 `eslint` | 전체 (§7.6 보안 규칙 포함) |
+| Lint | `biome` | 전체 (§7.6 보안 규칙 포함). 기본값으로 biome 채택 (속도/zero-config 우선); eslint로 대체 시 동등한 규칙셋 적용. |
 | Unit | Vitest | `translate.ts` SSE 파싱, `cache.ts`, `prompts.ts`, `protocol.ts` round-trip, `apfel-manager.ts` health (mock), `inject-ui.ts` DOM 구성 |
 
 ### 11.2 통합 (로컬 수동, CI 제외)
