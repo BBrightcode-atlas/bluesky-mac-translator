@@ -2,6 +2,7 @@ import { spawn as nodeSpawn } from 'node:child_process';
 import { closeSync, mkdirSync, openSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { apfelLogPath, log } from './logger';
+import { RestartGate } from './restart-gate';
 import { whichInPath } from './which';
 
 export interface SpawnedChild {
@@ -37,6 +38,9 @@ export class ApfelManager {
   private readonly spawnImpl: NonNullable<ApfelManagerOptions['spawnImpl']>;
   private child: SpawnedChild | null = null;
   private spawnInFlight: Promise<{ pid: number; port: number }> | null = null;
+  private monitorTimer: NodeJS.Timeout | null = null;
+  private monitorFails = 0;
+  private readonly gate = new RestartGate();
 
   constructor(opts: ApfelManagerOptions) {
     this.port = opts.port;
@@ -150,6 +154,48 @@ export class ApfelManager {
       });
     });
     this.child = null;
+  }
+
+  startMonitor(intervalMs = 30_000): void {
+    this.stopMonitor();
+    this.monitorTimer = setInterval(() => {
+      void this.tickMonitor();
+    }, intervalMs);
+  }
+
+  stopMonitor(): void {
+    if (this.monitorTimer) {
+      clearInterval(this.monitorTimer);
+      this.monitorTimer = null;
+    }
+    this.monitorFails = 0;
+  }
+
+  private async tickMonitor(): Promise<void> {
+    const ok = await this.checkHealth();
+    if (ok) {
+      this.monitorFails = 0;
+      return;
+    }
+    this.monitorFails += 1;
+    if (this.monitorFails < 3) return;
+
+    const decision = this.gate.shouldAttempt();
+    if (!decision.allow) {
+      log('warn', 'restart blocked', {
+        reason: decision.reason ?? 'backoff',
+        waitMs: decision.waitMs,
+      });
+      return;
+    }
+    log('info', 'apfel down → 자동 재시작 시도');
+    this.gate.recordAttempt();
+    this.monitorFails = 0;
+    try {
+      await this.spawnAndWait();
+    } catch (e) {
+      log('error', 'auto-restart 실패', { err: String(e) });
+    }
   }
 }
 

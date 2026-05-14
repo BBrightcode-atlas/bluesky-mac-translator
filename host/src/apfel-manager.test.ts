@@ -162,3 +162,22 @@ describe('ApfelManager concurrency + cleanup', () => {
     expect(child.kill).toHaveBeenCalledWith('SIGTERM');
   });
 });
+
+describe('ApfelManager.tickMonitor', () => {
+  it('헬스 3회 연속 실패 후 spawn 시도', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('', { status: 500 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const mgr = new ApfelManager({ port: 11434, which: () => '/x/apfel' });
+    const spawnSpy = vi.spyOn(mgr, 'spawnAndWait').mockResolvedValue({ pid: 1, port: 11434 });
+
+    const tick = (mgr as unknown as { tickMonitor: () => Promise<void> }).tickMonitor.bind(mgr);
+    await tick();
+    await tick();
+    expect(spawnSpy).not.toHaveBeenCalled();
+    await tick();
+    expect(spawnSpy).toHaveBeenCalledTimes(1);
+
+    vi.unstubAllGlobals();
+  });
+});
