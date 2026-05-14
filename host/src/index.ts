@@ -50,6 +50,14 @@ async function handle(req: Request, mgr: ApfelManager): Promise<Response> {
         await mgr.stop();
         return { type: 'status', running: false, port: PORT };
       }
+      default: {
+        req satisfies never;
+        return {
+          type: 'error',
+          code: 'spawn_failed',
+          message: 'unknown request type',
+        };
+      }
     }
   } catch (e) {
     if (e instanceof ApfelError) {
