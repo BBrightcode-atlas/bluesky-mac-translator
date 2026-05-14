@@ -8,8 +8,13 @@ interface StatusCache {
   value: Response;
 }
 
+interface Pending {
+  resolve: (res: Response) => void;
+  reject: (err: Error) => void;
+}
+
 let port: chrome.runtime.Port | null = null;
-let pending: ((res: Response) => void) | null = null;
+let pending: Pending | null = null;
 let statusCache: StatusCache | null = null;
 
 function connect(): chrome.runtime.Port {
@@ -18,11 +23,14 @@ function connect(): chrome.runtime.Port {
   p.onMessage.addListener((msg: Response) => {
     const cb = pending;
     pending = null;
-    cb?.(msg);
+    cb?.resolve(msg);
   });
   p.onDisconnect.addListener(() => {
     port = null;
+    const cb = pending;
     pending = null;
+    const reason = chrome.runtime.lastError?.message ?? 'disconnected';
+    cb?.reject(new Error(`NMH ${reason}`));
   });
   port = p;
   return p;
@@ -38,15 +46,20 @@ export async function send(req: Request): Promise<Response> {
       reject(new Error('NMH busy'));
       return;
     }
-    pending = (res) => {
-      if (req.type === 'status') statusCache = { at: Date.now(), value: res };
-      resolve(res);
+    pending = {
+      resolve: (res) => {
+        if (req.type === 'status' && res.type === 'status') {
+          statusCache = { at: Date.now(), value: res };
+        }
+        resolve(res);
+      },
+      reject,
     };
     try {
       p.postMessage(req);
     } catch (e) {
       pending = null;
-      reject(e);
+      reject(e instanceof Error ? e : new Error(String(e)));
     }
   });
 }
