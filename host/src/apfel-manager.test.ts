@@ -110,3 +110,55 @@ describe('ApfelManager.ensureRunning (헬스+spawn 통합)', () => {
     vi.unstubAllGlobals();
   });
 });
+
+describe('ApfelManager concurrency + cleanup', () => {
+  it('동시 spawnAndWait 호출은 spawnImpl을 한 번만 호출', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const spawnMock = vi.fn().mockReturnValue({
+      pid: 123,
+      exitCode: null,
+      on: vi.fn(),
+      kill: vi.fn(),
+    });
+    const mgr = new ApfelManager({
+      port: 11434,
+      which: () => '/x/apfel',
+      spawnImpl: spawnMock,
+      startTimeoutMs: 500,
+    });
+    const [a, b] = await Promise.all([mgr.spawnAndWait(), mgr.spawnAndWait()]);
+    expect(spawnMock).toHaveBeenCalledTimes(1);
+    expect(a).toEqual(b);
+    vi.unstubAllGlobals();
+  });
+
+  it('stop()은 SIGTERM 후 exit 이벤트로 즉시 resolve', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    let exitHandler: (() => void) | null = null;
+    const child = {
+      pid: 55,
+      exitCode: null as number | null,
+      on: vi.fn((
+        _e: string,
+        cb: (code: number | null, signal: NodeJS.Signals | null) => void,
+      ) => {
+        exitHandler = cb as unknown as () => void;
+      }),
+      kill: vi.fn(),
+    };
+    const mgr = new ApfelManager({
+      port: 11434,
+      which: () => '/x/apfel',
+      spawnImpl: () => child,
+      startTimeoutMs: 500,
+    });
+    await mgr.spawnAndWait();
+    const stopPromise = mgr.stop();
+    child.exitCode = 0;
+    (exitHandler as (() => void) | null)?.();
+    await stopPromise;
+    expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+  });
+});

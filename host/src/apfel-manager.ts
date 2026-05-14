@@ -1,5 +1,5 @@
 import { spawn as nodeSpawn } from 'node:child_process';
-import { mkdirSync, openSync } from 'node:fs';
+import { closeSync, mkdirSync, openSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { apfelLogPath, log } from './logger';
 import { whichInPath } from './which';
@@ -36,6 +36,7 @@ export class ApfelManager {
   private readonly which: (name: string) => string | null;
   private readonly spawnImpl: NonNullable<ApfelManagerOptions['spawnImpl']>;
   private child: SpawnedChild | null = null;
+  private spawnInFlight: Promise<{ pid: number; port: number }> | null = null;
 
   constructor(opts: ApfelManagerOptions) {
     this.port = opts.port;
@@ -82,47 +83,70 @@ export class ApfelManager {
   }
 
   async spawnAndWait(): Promise<{ pid: number; port: number }> {
+    if (this.spawnInFlight) return this.spawnInFlight;
+    this.spawnInFlight = this.doSpawn();
+    try {
+      return await this.spawnInFlight;
+    } finally {
+      this.spawnInFlight = null;
+    }
+  }
+
+  private async doSpawn(): Promise<{ pid: number; port: number }> {
     const bin = this.findApfelBinary();
     if (!bin) throw new ApfelError('apfel_not_installed', 'apfel binary not found in PATH');
 
     mkdirSync(dirname(apfelLogPath), { recursive: true });
     const logFd = openSync(apfelLogPath, 'a');
-    const child = this.spawnImpl(bin, ['--serve', '--port', String(this.port)], {
-      stdio: ['ignore', logFd, logFd],
-    });
-    this.child = child;
-    log('info', 'apfel spawn', { pid: child.pid, port: this.port });
+    try {
+      const child = this.spawnImpl(bin, ['--serve', '--port', String(this.port)], {
+        stdio: ['ignore', logFd, logFd],
+      });
+      this.child = child;
+      log('info', 'apfel spawn', { pid: child.pid, port: this.port });
 
-    child.on('exit', (code, signal) => {
-      log('warn', 'apfel exit', { code, signal });
-      if (this.child === child) this.child = null;
-    });
+      child.on('exit', (code, signal) => {
+        log('warn', 'apfel exit', { code, signal });
+        if (this.child === child) this.child = null;
+      });
 
-    const deadline = Date.now() + this.startTimeoutMs;
-    while (Date.now() < deadline) {
-      if (child.exitCode !== null) {
-        throw new ApfelError('spawn_failed', `exited with code=${child.exitCode}`);
+      const deadline = Date.now() + this.startTimeoutMs;
+      while (Date.now() < deadline) {
+        if (child.exitCode !== null) {
+          throw new ApfelError('spawn_failed', `exited with code=${child.exitCode}`);
+        }
+        if (await this.checkHealth()) {
+          return { pid: child.pid ?? -1, port: this.port };
+        }
+        await sleep(150);
       }
-      if (await this.checkHealth()) {
-        return { pid: child.pid ?? -1, port: this.port };
-      }
-      await sleep(150);
+      throw new ApfelError('timeout', `apfel not ready in ${this.startTimeoutMs}ms`);
+    } finally {
+      closeSync(logFd);
     }
-    throw new ApfelError('timeout', `apfel not ready in ${this.startTimeoutMs}ms`);
   }
 
   async stop(): Promise<void> {
     const c = this.child;
-    if (!c || c.exitCode !== null) return;
+    if (!c || c.exitCode !== null) {
+      this.child = null;
+      return;
+    }
     c.kill('SIGTERM');
     await new Promise<void>((resolve) => {
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        resolve();
+      };
       const timer = setTimeout(() => {
         if (c.exitCode === null) c.kill('SIGKILL');
-        resolve();
+        finish();
       }, 3000);
       c.on('exit', () => {
         clearTimeout(timer);
-        resolve();
+        finish();
       });
     });
     this.child = null;
