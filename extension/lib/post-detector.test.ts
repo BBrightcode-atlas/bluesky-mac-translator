@@ -41,6 +41,30 @@ describe('findUnprocessedPosts', () => {
     expect(findUnprocessedPosts(document.body)).toHaveLength(0);
     expect(isProcessed(el)).toBe(true);
   });
+
+  it('testid 매치가 0건이면 article[role="article"] fallback', () => {
+    const article = document.createElement('article');
+    article.setAttribute('role', 'article');
+    const t = document.createElement('div');
+    t.setAttribute('data-testid', 'postText');
+    t.textContent = 'fallback post';
+    article.appendChild(t);
+    document.body.appendChild(article);
+    const found = findUnprocessedPosts(document.body);
+    expect(found).toHaveLength(1);
+    expect(found[0]).toBe(article);
+  });
+
+  it('testid 매치가 있으면 fallback은 사용 안 함', () => {
+    // testid post 1개 + bare article 1개가 동시에 있으면, fallback은 트리거되지 않고 testid만 반환
+    makePost('feedItem-by-alice', 'has testid');
+    const article = document.createElement('article');
+    article.setAttribute('role', 'article');
+    document.body.appendChild(article);
+    const found = findUnprocessedPosts(document.body);
+    expect(found).toHaveLength(1);
+    expect(found[0]?.getAttribute('data-testid')).toBe('feedItem-by-alice');
+  });
 });
 
 describe('extractPostText', () => {

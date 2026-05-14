@@ -7,9 +7,16 @@ const FALLBACK_SELECTOR = 'article[role="article"]';
 const PROCESSED_ATTR = 'data-translator-injected';
 const POST_TEXT_SELECTOR = '[data-testid="postText"]';
 
+/**
+ * Returns posts not yet marked as processed. The caller MUST call markProcessed()
+ * on each returned element before the next invocation, or duplicates will be returned.
+ */
 export function findUnprocessedPosts(root: ParentNode): HTMLElement[] {
   const selector = POST_SELECTORS.join(',');
   const matches = Array.from(root.querySelectorAll<HTMLElement>(selector));
+  // Fallback is exclusive, not additive: it only fires when ZERO testid posts exist.
+  // A partial bsky DOM migration (some testid, some bare <article>) would silently
+  // skip the bare ones — accepted tradeoff vs. the dedup complexity of merging results.
   if (matches.length === 0) {
     return Array.from(root.querySelectorAll<HTMLElement>(FALLBACK_SELECTOR)).filter(
       (el) => !isProcessed(el),
@@ -27,6 +34,9 @@ export function markProcessed(el: HTMLElement): void {
 }
 
 export function extractPostText(post: HTMLElement): string | null {
+  // querySelector returns first match in document order. For quote-posts (a post
+  // embedding another), the outer post's postText precedes the nested one — so this
+  // correctly extracts the outer post's text.
   const node = post.querySelector(POST_TEXT_SELECTOR);
   const text = node?.textContent?.trim() ?? '';
   return text.length > 0 ? text : null;
