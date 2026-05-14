@@ -1,6 +1,6 @@
 import { appendFileSync, mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
 import { homedir } from 'node:os';
+import { dirname } from 'node:path';
 
 const LOG_PATH = `${homedir()}/Library/Logs/flotter-bsky-translator/host.log`;
 

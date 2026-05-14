@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApfelManager, ApfelError } from './apfel-manager';
+import { ApfelError, ApfelManager } from './apfel-manager';
 
 describe('ApfelManager.checkHealth', () => {
   let fetchMock: ReturnType<typeof vi.fn>;
@@ -37,9 +37,7 @@ describe('ApfelManager.checkHealth', () => {
         );
       });
     });
-    expect(
-      await new ApfelManager({ port: 11434, healthTimeoutMs: 30 }).checkHealth(),
-    ).toBe(false);
+    expect(await new ApfelManager({ port: 11434, healthTimeoutMs: 30 }).checkHealth()).toBe(false);
   });
 });
 
@@ -140,10 +138,7 @@ describe('ApfelManager concurrency + cleanup', () => {
     const child = {
       pid: 55,
       exitCode: null as number | null,
-      on: vi.fn((
-        _e: string,
-        cb: (code: number | null, signal: NodeJS.Signals | null) => void,
-      ) => {
+      on: vi.fn((_e: string, cb: (code: number | null, signal: NodeJS.Signals | null) => void) => {
         exitHandler = cb as unknown as () => void;
       }),
       kill: vi.fn(),

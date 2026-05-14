@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
 import { Readable } from 'node:stream';
-import { encode, decode, readMessages } from './protocol';
+import { describe, expect, it } from 'vitest';
+import { decode, encode, readMessages } from './protocol';
 import type { Request, Response } from './types';
 
 describe('protocol', () => {

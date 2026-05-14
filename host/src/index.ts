@@ -1,8 +1,8 @@
-import { ApfelManager, ApfelError } from './apfel-manager';
-import { encode, readMessages } from './protocol';
-import { acquireSinglePid, releasePid } from './pidfile';
+import { ApfelError, ApfelManager } from './apfel-manager';
 import { log } from './logger';
-import type { Request, Response, ErrorCode } from './types';
+import { acquireSinglePid, releasePid } from './pidfile';
+import { encode, readMessages } from './protocol';
+import type { ErrorCode, Request, Response } from './types';
 
 const PORT = 11434;
 

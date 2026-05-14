@@ -1,6 +1,6 @@
-import { existsSync, readFileSync, writeFileSync, unlinkSync, mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
+import { dirname } from 'node:path';
 
 const PID_PATH = `${homedir()}/Library/Application Support/flotter-bsky-translator/host.pid`;
 
