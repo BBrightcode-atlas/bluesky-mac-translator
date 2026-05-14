@@ -1,0 +1,61 @@
+:host {
+  display: block;
+  margin-top: 4px;
+  font-family: inherit;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.trigger {
+  background: transparent;
+  color: var(--bsky-link, #1185fe);
+  font: inherit;
+  border: none;
+  cursor: pointer;
+  padding: 4px 0;
+}
+.trigger:hover {
+  text-decoration: underline;
+}
+
+.lang {
+  font: inherit;
+  background: transparent;
+  color: var(--bsky-text, inherit);
+  border: 1px solid var(--bsky-border, rgba(0, 0, 0, 0.15));
+  border-radius: 6px;
+  padding: 2px 6px;
+}
+
+.result {
+  margin-top: 6px;
+  padding: 8px 10px;
+  background: var(--bsky-secondary-bg, rgba(0, 0, 0, 0.04));
+  border-radius: 8px;
+  font-size: 0.95em;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.result[data-state="error"] {
+  background: var(--bsky-error-bg, rgba(220, 53, 69, 0.08));
+  color: var(--bsky-error-text, #b00020);
+}
+
+.retry {
+  display: inline-block;
+  margin-left: 6px;
+  color: var(--bsky-link, #1185fe);
+  cursor: pointer;
+  font: inherit;
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+.retry:hover {
+  text-decoration: underline;
+}
