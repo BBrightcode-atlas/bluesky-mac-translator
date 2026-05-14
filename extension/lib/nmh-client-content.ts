@@ -1,4 +1,11 @@
+interface EnsureResponse {
+  ok: boolean;
+  error?: string;
+}
+
 export async function ensureServerReady(): Promise<void> {
-  // Task 16에서 background 메시지로 교체
-  return;
+  const res = (await chrome.runtime.sendMessage({ kind: 'ensure_ready' })) as EnsureResponse;
+  if (!res?.ok) {
+    throw new Error(res?.error ?? 'NMH ensure_ready 실패');
+  }
 }
