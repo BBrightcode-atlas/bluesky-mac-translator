@@ -46,6 +46,8 @@ export function mountTranslatorUI(postEl: HTMLElement): TranslatorHandle {
   const result = document.createElement('div') as HTMLDivElement;
   result.className = 'result';
   result.hidden = true;
+  const resultText = document.createTextNode('');
+  result.appendChild(resultText);
 
   shadow.appendChild(row);
   shadow.appendChild(result);
@@ -55,6 +57,18 @@ export function mountTranslatorUI(postEl: HTMLElement): TranslatorHandle {
     textNode.parentNode.insertBefore(host, textNode.nextSibling);
   } else {
     postEl.appendChild(host);
+  }
+
+  // showError replaces result's children with a span+button (removing resultText).
+  // ensureResultText re-establishes resultText as result's only child so that a
+  // subsequent appendChunk never clobbers an error span or prepends stale text.
+  function ensureResultText(): Text {
+    if (resultText.parentNode !== result) {
+      while (result.firstChild) result.removeChild(result.firstChild);
+      resultText.data = '';
+      result.appendChild(resultText);
+    }
+    return resultText;
   }
 
   return {
@@ -70,11 +84,13 @@ export function mountTranslatorUI(postEl: HTMLElement): TranslatorHandle {
     },
     reset() {
       while (result.firstChild) result.removeChild(result.firstChild);
+      resultText.data = '';
+      result.appendChild(resultText);
       result.removeAttribute('data-state');
     },
     appendChunk(chunk: string) {
       result.removeAttribute('data-state');
-      result.textContent = (result.textContent ?? '') + chunk;
+      ensureResultText().appendData(chunk);
     },
     showError(message: string, onRetry: () => void) {
       while (result.firstChild) result.removeChild(result.firstChild);

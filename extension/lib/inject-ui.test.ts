@@ -63,4 +63,36 @@ describe('mountTranslatorUI', () => {
     retry?.click();
     expect(clicked).toBe(true);
   });
+
+  it('showError 후 reset → appendChunk 하면 에러 흔적 없이 깨끗하게 렌더', () => {
+    const handle = mountTranslatorUI(makePostWithText());
+    handle.showError('실패', () => {});
+    expect(handle.result.dataset.state).toBe('error');
+    handle.reset();
+    handle.appendChunk('번역됨');
+    expect(handle.result.textContent).toBe('번역됨');
+    expect(handle.result.dataset.state).toBeUndefined();
+    expect(handle.result.querySelector('button.retry')).toBeNull();
+  });
+
+  it('showError 직후 reset 없이 appendChunk 해도 에러 노드를 깨뜨리지 않고 self-heal', () => {
+    const handle = mountTranslatorUI(makePostWithText());
+    handle.showError('실패', () => {});
+    // reset()을 건너뛰고 바로 appendChunk — ensureResultText가 result를 정리하고 재구성
+    handle.appendChunk('회복');
+    expect(handle.result.textContent).toBe('회복');
+    expect(handle.result.querySelector('button.retry')).toBeNull();
+    expect(handle.result.dataset.state).toBeUndefined();
+  });
+
+  it('reset은 result 내용을 비우고, destroy는 host를 DOM에서 제거', () => {
+    const post = makePostWithText();
+    const handle = mountTranslatorUI(post);
+    handle.appendChunk('내용');
+    handle.reset();
+    expect(handle.result.textContent).toBe('');
+    expect(post.contains(handle.host)).toBe(true);
+    handle.destroy();
+    expect(post.contains(handle.host)).toBe(false);
+  });
 });
