@@ -5,14 +5,22 @@ export class Semaphore {
   constructor(private readonly cap: number) {}
 
   async acquire(): Promise<() => void> {
+    const makeRelease = (): (() => void) => {
+      let released = false;
+      return () => {
+        if (released) return;
+        released = true;
+        this.release();
+      };
+    };
     if (this.inFlight < this.cap) {
       this.inFlight += 1;
-      return () => this.release();
+      return makeRelease();
     }
     return new Promise<() => void>((resolve) => {
       this.queue.push(() => {
         this.inFlight += 1;
-        resolve(() => this.release());
+        resolve(makeRelease());
       });
     });
   }

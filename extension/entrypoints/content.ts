@@ -37,7 +37,6 @@ export default defineContentScript({
       mounted.set(post, handle);
 
       let abortCtl: AbortController | null = null;
-      let acc = '';
       let visible = false;
       let activeLang: TargetLang = settings.targetLang;
 
@@ -61,24 +60,25 @@ export default defineContentScript({
         const signal = abortCtl.signal;
 
         const release = await sem.acquire();
+        let localAcc = '';
         const hangTimer = setTimeout(() => {
-          if (acc.length === 0) handle.appendChunk('응답 지연 중...');
+          if (localAcc.length === 0) handle.appendChunk('응답 지연 중...');
         }, 10_000);
 
         try {
           await ensureServerReady();
-          acc = '';
           for await (const chunk of translateStream(
             text,
             langValue,
             settings.apfelEndpoint,
             signal,
           )) {
-            if (acc.length === 0) handle.reset();
-            acc += chunk;
+            if (signal.aborted) break;
+            if (localAcc.length === 0) handle.reset();
+            localAcc += chunk;
             handle.appendChunk(chunk);
           }
-          if (acc.length > 0) cache.set(key, acc);
+          if (localAcc.length > 0) cache.set(key, localAcc);
           handle.trigger.textContent = '번역 숨기기';
         } catch (e) {
           if ((e as Error).name === 'AbortError') return;
@@ -131,6 +131,14 @@ export default defineContentScript({
 
     const observer = new MutationObserver((records) => {
       idleSchedule(() => {
+        // bsky가 가상화 피드에서 post를 제거하면 mounted 항목이 누수됨.
+        // 매 옵저버 틱마다 DOM에서 떨어진 post의 핸들을 정리한다.
+        for (const [post, h] of mounted) {
+          if (!post.isConnected) {
+            h.destroy();
+            mounted.delete(post);
+          }
+        }
         for (const r of records) {
           for (const node of r.addedNodes) {
             if (node instanceof HTMLElement) scan(node);
