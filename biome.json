@@ -1,7 +1,15 @@
 {
   "$schema": "https://biomejs.dev/schemas/1.9.4/schema.json",
   "files": {
-    "ignore": ["dist", ".output", ".wxt", "node_modules", "coverage"]
+    "ignore": [
+      "**/dist/**",
+      "**/.output/**",
+      "**/.wxt/**",
+      "**/node_modules/**",
+      "**/coverage/**",
+      "**/node-jiti/**",
+      "**/node-compile-cache/**"
+    ]
   },
   "formatter": {
     "enabled": true,
