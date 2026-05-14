@@ -13,6 +13,8 @@ while IFS= read -r pat; do
   # pipeline exit) is treated as empty output, not a script error.
   # We only set found=1 when the captured output is actually non-empty.
   hits=$(
+    # 2>/dev/null: git grep emits "pathspec did not match" when extension/ or host/ don't exist yet;
+    # suppress that error so the guard exits cleanly on a fresh repo with no source dirs.
     git grep -nE -- "$pat" 'extension/**/*.ts' 'extension/**/*.tsx' 'host/**/*.ts' 2>/dev/null \
       | grep -v '\.test\.ts:' \
       | grep -v 'scripts/check-unsafe-dom\.sh' \

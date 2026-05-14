@@ -3,6 +3,6 @@
 \.insertAdjacentHTML\b
 \bdocument\.write\b
 \beval[[:space:]]*\(
-\bFunction[[:space:]]*\([^)]*\)[[:space:]]*\(
+(^|[^a-zA-Z0-9_$])new[[:space:]]+Function[[:space:]]*\(
 \bsetTimeout[[:space:]]*\([[:space:]]*['"]
 \bsetInterval[[:space:]]*\([[:space:]]*['"]
