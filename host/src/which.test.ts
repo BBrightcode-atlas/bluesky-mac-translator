@@ -28,4 +28,12 @@ describe('whichInPath', () => {
   it('빈 PATH 처리', () => {
     expect(whichInPath('foo', { path: '', access: vi.fn() })).toBeNull();
   });
+
+  it('PATH에 빈 세그먼트가 있어도 건너뛰고 정상 동작', () => {
+    const access = vi.fn().mockImplementation((p: string) => {
+      if (p === '/b/foo') return;
+      throw new Error('ENOENT');
+    });
+    expect(whichInPath('foo', { path: '/a::/b', access })).toBe('/b/foo');
+  });
 });
