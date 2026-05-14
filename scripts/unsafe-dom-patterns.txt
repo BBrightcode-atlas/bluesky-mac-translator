@@ -1,0 +1,8 @@
+\.innerHTML[[:space:]]*=
+\.outerHTML[[:space:]]*=
+\.insertAdjacentHTML\b
+\bdocument\.write\b
+\beval[[:space:]]*\(
+\bFunction[[:space:]]*\([^)]*\)[[:space:]]*\(
+\bsetTimeout[[:space:]]*\([[:space:]]*['"]
+\bsetInterval[[:space:]]*\([[:space:]]*['"]
