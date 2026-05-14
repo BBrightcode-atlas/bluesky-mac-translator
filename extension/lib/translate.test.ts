@@ -81,4 +81,30 @@ describe('translateStream', () => {
       }
     }).rejects.toBeInstanceOf(TranslateError);
   });
+
+  it('소비자가 early break 해도 reader가 정리됨', async () => {
+    let cancelled = false;
+    const encoder = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"첫"}}]}\n'));
+        controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"둘"}}]}\n'));
+        // controller stays open — stream not closed
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    fetchMock.mockResolvedValueOnce(
+      new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }),
+    );
+
+    const tokens: string[] = [];
+    for await (const t of translateStream('hi', 'ko', 'http://x', new AbortController().signal)) {
+      tokens.push(t);
+      break; // early termination after first token
+    }
+    expect(tokens).toEqual(['첫']);
+    expect(cancelled).toBe(true); // reader.cancel() propagated to the underlying stream
+  });
 });
