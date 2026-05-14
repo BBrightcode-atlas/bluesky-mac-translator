@@ -14,8 +14,16 @@ export function App() {
 
   async function patch(p: Partial<Settings>) {
     if (!settings) return;
-    setSettings({ ...settings, ...p });
-    await saveSettings(p);
+    const prev = settings;
+    const next = { ...settings, ...p };
+    setSettings(next);
+    try {
+      await saveSettings(p);
+    } catch (e) {
+      // 저장 실패 시 낙관적 업데이트를 되돌린다
+      console.error('[bsky-translator] settings 저장 실패', e);
+      setSettings(prev);
+    }
   }
 
   if (!settings) return <div className="container">불러오는 중...</div>;

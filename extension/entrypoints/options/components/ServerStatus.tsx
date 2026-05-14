@@ -6,6 +6,7 @@ interface StatusInfo {
   port?: number;
   version?: string;
   error?: string;
+  code?: string;
 }
 
 interface Props {
@@ -19,6 +20,7 @@ interface NmhResponse {
   port?: number;
   version?: string;
   message?: string;
+  code?: string;
 }
 
 export function ServerStatus({ endpointIsLocal }: Props) {
@@ -43,7 +45,7 @@ export function ServerStatus({ endpointIsLocal }: Props) {
             version: res.version,
           });
         } else if (res?.type === 'error') {
-          setInfo({ running: false, error: res.message });
+          setInfo({ running: false, error: res.message, code: res.code });
         }
       } catch (e) {
         if (!cancelled) setInfo({ running: false, error: String(e) });
@@ -79,7 +81,7 @@ export function ServerStatus({ endpointIsLocal }: Props) {
       {info.error ? (
         <p>
           <span className="status-dot bad" />
-          {info.error.includes('apfel_not_installed') ? (
+          {info.code === 'apfel_not_installed' ? (
             <>
               apfel이 설치되지 않았습니다. <span className="code">brew install apfel</span>
             </>
