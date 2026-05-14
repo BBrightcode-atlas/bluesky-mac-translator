@@ -20,12 +20,26 @@ describe('protocol', () => {
   it('readMessages yields each message from a chunked stream', async () => {
     const a: Request = { type: 'status' };
     const b: Request = { type: 'restart' };
+    const bufA = encode(a);
     const stream = Readable.from([
-      encode(a).subarray(0, 3),
-      Buffer.concat([encode(a).subarray(3), encode(b)]),
+      bufA.subarray(0, 3),
+      Buffer.concat([bufA.subarray(3), encode(b)]),
     ]);
     const out: Request[] = [];
     for await (const m of readMessages<Request>(stream)) out.push(m);
     expect(out).toEqual([a, b]);
+  });
+
+  it('readMessages handles an empty stream cleanly', async () => {
+    const stream = Readable.from([] as Buffer[]);
+    const out: unknown[] = [];
+    for await (const m of readMessages(stream)) out.push(m);
+    expect(out).toEqual([]);
+  });
+
+  it('decode throws a clear error on a truncated buffer', () => {
+    const full = encode({ type: 'status' });
+    expect(() => decode(full.subarray(0, 2))).toThrow(/too short for header/);
+    expect(() => decode(full.subarray(0, 6))).toThrow(/too short for body/);
   });
 });
