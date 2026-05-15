@@ -17,11 +17,12 @@ function makePostWithText(): HTMLElement {
 }
 
 describe('mountTranslatorUI', () => {
-  it('Shadow DOM host를 postText 다음 형제로 삽입', () => {
+  it('Shadow DOM host를 postText 안 마지막 자식으로 삽입', () => {
     const post = makePostWithText();
     const handle = mountTranslatorUI(post);
     const postText = post.querySelector('[data-testid="postText"]') as HTMLElement;
-    expect(postText.nextSibling).toBe(handle.host);
+    expect(postText.lastChild).toBe(handle.host);
+    expect(postText.contains(handle.host)).toBe(true);
     expect(handle.host.shadowRoot).not.toBeNull();
   });
 

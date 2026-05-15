@@ -46,9 +46,16 @@ export function mountTranslatorUI(postEl: HTMLElement): TranslatorHandle {
   shadow.appendChild(row);
   shadow.appendChild(result);
 
+  // Mount inside the postText element itself, as its last child. This keeps
+  // the translator UI visually adjacent to the post body on both feed cards
+  // (small text container) and thread main posts (postText nested deep in a
+  // larger card with images/meta below). Putting the host as a sibling of
+  // postText drifted the UI far below the body on thread pages.
+  // Note: extractPostText() runs BEFORE mount in attach(), so the source text
+  // captured for translation never includes our UI's textContent.
   const textNode = findPostTextNode(postEl);
-  if (textNode?.parentNode) {
-    textNode.parentNode.insertBefore(host, textNode.nextSibling);
+  if (textNode) {
+    textNode.appendChild(host);
   } else {
     postEl.appendChild(host);
   }
