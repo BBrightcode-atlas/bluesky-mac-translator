@@ -1,6 +1,5 @@
 import { runClaude } from './claude-spawn';
 import { log } from './logger';
-import { acquireSinglePid, releasePid } from './pidfile';
 import { encode, readMessages } from './protocol';
 import type { Request, Response } from './types';
 import { whichInPath } from './which';
@@ -105,11 +104,11 @@ async function handle(req: Request): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  if (!acquireSinglePid()) {
-    log('warn', 'another host process is running; exiting');
-    process.exit(0);
-  }
-  process.on('exit', releasePid);
+  // No single-instance guard: Chrome spawns a fresh NMH child per connectNative
+  // call (one per content-script / options-page port). Each instance has its
+  // own stdin/stdout binding; serializing them through a single host process
+  // would block parallel translates across tabs. Each child manages a single
+  // claude subprocess locally via currentAbort.
   process.on('SIGINT', () => process.exit(0));
   process.on('SIGTERM', () => process.exit(0));
   log('info', 'host started', { pid: process.pid });
