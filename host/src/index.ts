@@ -39,8 +39,11 @@ function runOneShot(bin: string, args: string[]): Promise<string> {
 }
 
 function buildPostPrompt(text: string, targetLang: 'ko' | 'ja' | 'zh'): string {
-  // Phase 2 의 prompts.ts 와 같은 내용 — host에서 사용하기 위해 동일 문자열로 복제.
-  // (extension/host 가 독립 빌드라 함수 import 못 함; 같은 spec을 두 쪽에서 따른다.)
+  // INTENTIONAL DUPLICATE of extension/lib/prompts.ts buildPostPrompt — extension and host
+  // are independent builds and can't share imports. The Phase 2 Task 7 rewrite of
+  // extension/lib/prompts.ts produces the same strings as this function. If you change one,
+  // change the other in the same PR. Until Phase 2 lands, extension/lib/prompts.ts is still
+  // the apfel-era SYSTEM_PROMPTS — temporary mismatch by design.
   const langName = { ko: 'Korean (한국어)', ja: 'Japanese (日本語)', zh: 'Simplified Chinese (简体中文)' }[targetLang];
   return [
     `You are a translator for social media posts on Bluesky.`,
@@ -55,6 +58,8 @@ function buildPostPrompt(text: string, targetLang: 'ko' | 'ja' | 'zh'): string {
 }
 
 function buildReplyPrompt(originalPost: string, reply: string): string {
+  // No explicit target-language arg: we rely on Claude to infer the original post's
+  // language and translate the reply to match. Spec §5 Flow 2 — design decision.
   return [
     `You are a translator for Bluesky reply composition.`,
     `Below is the ORIGINAL POST a user is replying to, followed by their REPLY draft.`,
