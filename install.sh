@@ -51,8 +51,14 @@ cp -R "$SRC_DIR/extension/.output/chrome-mv3" "$INSTALL_DIR/extension"
 
 step "5/7  host-launcher.sh"
 NODE_BIN="$(command -v node)"
+CLAUDE_BIN="$(command -v claude || true)"
+CLAUDE_DIR=""
+[ -n "$CLAUDE_BIN" ] && CLAUDE_DIR="$(dirname "$CLAUDE_BIN")"
 cat > "$INSTALL_DIR/host-launcher.sh" <<EOF
 #!/usr/bin/env bash
+# Chrome NMH 자식 프로세스는 minimal PATH만 받으므로 (/usr/bin:/bin 정도),
+# claude / node 가 있는 디렉토리를 명시적으로 PATH에 추가한다.
+export PATH="${CLAUDE_DIR}:$(dirname "$NODE_BIN"):/opt/homebrew/bin:/usr/local/bin:\$PATH"
 exec "$NODE_BIN" "$INSTALL_DIR/host/index.js" "\$@"
 EOF
 chmod +x "$INSTALL_DIR/host-launcher.sh"
