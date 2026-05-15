@@ -46,18 +46,27 @@ export function mountTranslatorUI(postEl: HTMLElement): TranslatorHandle {
   shadow.appendChild(row);
   shadow.appendChild(result);
 
-  // Mount inside the postText element itself, as its last child. This keeps
-  // the translator UI visually adjacent to the post body on both feed cards
-  // (small text container) and thread main posts (postText nested deep in a
-  // larger card with images/meta below). Putting the host as a sibling of
-  // postText drifted the UI far below the body on thread pages.
+  // Mount strategy (in priority order):
+  //   1. If Bluesky's built-in "Translate" link (Google Translate redirect) is
+  //      rendered inside this post, hide it and place our host in its parent —
+  //      this is the spot users already expect "번역" to be, and keeps us in
+  //      line with bsky's own typography.
+  //   2. Otherwise, mount inside postText as its last child (keeps feed and
+  //      thread main posts visually consistent — postText sibling drifts far
+  //      below the body on thread cards).
   // Note: extractPostText() runs BEFORE mount in attach(), so the source text
   // captured for translation never includes our UI's textContent.
-  const textNode = findPostTextNode(postEl);
-  if (textNode) {
-    textNode.appendChild(host);
+  const bskyTranslateLink = findBskyTranslateLink(postEl);
+  if (bskyTranslateLink?.parentNode) {
+    bskyTranslateLink.style.display = 'none';
+    bskyTranslateLink.parentNode.insertBefore(host, bskyTranslateLink.nextSibling);
   } else {
-    postEl.appendChild(host);
+    const textNode = findPostTextNode(postEl);
+    if (textNode) {
+      textNode.appendChild(host);
+    } else {
+      postEl.appendChild(host);
+    }
   }
 
   // showError replaces result's children with a span+button (removing resultText).
@@ -117,4 +126,18 @@ export function setThemeTokens(host: HTMLElement, tokens: Record<string, string>
   for (const [k, v] of Object.entries(tokens)) {
     host.style.setProperty(k, v);
   }
+}
+
+// Bluesky renders a built-in "Translate" link (opens Google Translate) inside
+// each post. We hide it and take its slot so our inline translation appears
+// where the user already expects to click. The aria-label is locale-specific —
+// keep this list in sync with supported user locales.
+const BSKY_TRANSLATE_ARIA_LABELS = ['번역', 'Translate', '翻译', '翻訳'] as const;
+
+export function findBskyTranslateLink(postEl: HTMLElement): HTMLElement | null {
+  for (const label of BSKY_TRANSLATE_ARIA_LABELS) {
+    const a = postEl.querySelector<HTMLElement>(`a[aria-label="${label}"]`);
+    if (a) return a;
+  }
+  return null;
 }

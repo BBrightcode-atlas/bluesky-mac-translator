@@ -17,7 +17,29 @@ function makePostWithText(): HTMLElement {
 }
 
 describe('mountTranslatorUI', () => {
-  it('Shadow DOM host를 postText 안 마지막 자식으로 삽입', () => {
+  it('bsky 기본 번역 a 가 있으면 그 자리에 host 마운트 + a 숨김', () => {
+    const post = document.createElement('div');
+    post.setAttribute('data-testid', 'feedItem-by-x');
+    const txt = document.createElement('div');
+    txt.setAttribute('data-testid', 'postText');
+    txt.textContent = 'hello';
+    post.appendChild(txt);
+    const wrap = document.createElement('div');
+    const bskyLink = document.createElement('a');
+    bskyLink.setAttribute('href', '#');
+    bskyLink.setAttribute('aria-label', '번역');
+    wrap.appendChild(bskyLink);
+    post.appendChild(wrap);
+    document.body.appendChild(post);
+
+    const handle = mountTranslatorUI(post);
+    expect(bskyLink.style.display).toBe('none');
+    expect(bskyLink.nextSibling).toBe(handle.host);
+    // postText 안에는 host 가 안 들어 있음 (fallback 경로 안 탐)
+    expect(txt.contains(handle.host)).toBe(false);
+  });
+
+  it('Shadow DOM host를 postText 안 마지막 자식으로 삽입 (bsky 링크 없을 때 fallback)', () => {
     const post = makePostWithText();
     const handle = mountTranslatorUI(post);
     const postText = post.querySelector('[data-testid="postText"]') as HTMLElement;
