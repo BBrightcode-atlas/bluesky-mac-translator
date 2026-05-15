@@ -130,7 +130,7 @@ export default defineContentScript({
         let acc = '';
         const hangTimer = setTimeout(() => {
           if (acc.length === 0) handle.appendChunk('응답 지연 중...');
-        }, 10_000);
+        }, 15_000);
 
         translateViaBackground(
           { type: 'translate', mode: 'post', text, targetLang: langValue },
@@ -199,7 +199,7 @@ export default defineContentScript({
         let acc = '';
         const hangTimer = setTimeout(() => {
           if (acc.length === 0) handle.appendChunk('응답 지연 중...');
-        }, 10_000);
+        }, 15_000);
         translateViaBackground(
           { type: 'translate', mode: 'reply', originalPost, reply },
           (chunk) => {

@@ -42,7 +42,10 @@ export function runClaude(args: RunClaudeArgs, cb: RunClaudeCallbacks): Promise<
     try {
       child = spawner(
         'claude',
-        ['-p', args.prompt, '--output-format', 'stream-json', '--verbose'],
+        // --bare skips hooks, LSP, plugin sync, CLAUDE.md auto-discovery, etc.
+        // Measured ~2x faster cold start (5.3s → 2.7s) and prevents user's
+        // SessionStart hooks from polluting the stream-json output.
+        ['-p', args.prompt, '--bare', '--output-format', 'stream-json', '--verbose'],
         { stdio: ['ignore', 'pipe', 'pipe'] },
       );
     } catch (e) {

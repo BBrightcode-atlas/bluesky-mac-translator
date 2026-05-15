@@ -43,7 +43,7 @@ describe('runClaude', () => {
     expect(events).toEqual(['done']);
     expect(spawner).toHaveBeenCalledWith(
       'claude',
-      ['-p', 'hi', '--output-format', 'stream-json', '--verbose'],
+      ['-p', 'hi', '--bare', '--output-format', 'stream-json', '--verbose'],
       expect.objectContaining({ stdio: ['ignore', 'pipe', 'pipe'] }),
     );
   });
