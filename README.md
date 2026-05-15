@@ -1,7 +1,6 @@
 # Bluesky Mac Translator
 
-bsky.app 게시물을 macOS 내장 LLM(apfel)으로 한국어/일본어/중국어로 빠르게 번역하는 Chrome extension.
-사내 전용. 토큰 비용 0, 외부 네트워크 호출 없음.
+bsky.app 게시물을 `claude` CLI로 한국어/일본어/중국어로 번역하는 Chrome extension. 답글 작성 시 원 포스트의 언어로도 번역. 사내 전용.
 
 ## 설치
 
@@ -9,10 +8,10 @@ bsky.app 게시물을 macOS 내장 LLM(apfel)으로 한국어/일본어/중국�
 curl -fsSL https://raw.githubusercontent.com/flotter-atlas/bluesky-mac-translator/main/install.sh | bash
 ```
 
-요구사항: macOS Tahoe + Apple Silicon + Apple Intelligence 활성, Homebrew, Chrome.
+요구사항: macOS + claude CLI (`npm i -g @anthropic-ai/claude-code` + `claude login`), Homebrew, Chrome.
 
 설치 흐름:
-1. apfel/node/pnpm 자동 설치
+1. claude CLI 존재 확인 + node/pnpm 자동 설치
 2. repo clone + 빌드
 3. `~/Library/Application Support/flotter-bsky-translator/`로 산출물 배치
 4. Chrome 개발자 모드에서 unpacked 로드 → ID 입력
@@ -20,12 +19,17 @@ curl -fsSL https://raw.githubusercontent.com/flotter-atlas/bluesky-mac-translato
 
 ## 사용
 
+### 게시물 번역
 1. https://bsky.app/ 새로고침
-2. 게시물 텍스트 아래 **번역** 링크 클릭
-3. 첫 토큰 1초 이내 스트리밍 시작
+2. 게시물 텍스트 아래 **번역** 클릭
+3. claude로 스트리밍 응답
 4. 다시 클릭하면 접힘
 
-옵션 페이지에서: 기본 언어, ▾ 드롭다운 on/off, 엔드포인트 변경, 서버 상태/재시작/종료.
+### 답글 번역 (v0.0.2+)
+
+외국어 포스트에 답글을 작성할 때 compose 박스 아래의 **번역** 버튼을 누르면, 답글 텍스트가 원 포스트의 언어로 번역되어 미리보기로 표시됩니다. compose 내용은 바뀌지 않으니 직접 복사해서 붙여넣으세요.
+
+옵션 페이지: 기본 번역 언어 선택, claude CLI 진단.
 
 ## 업데이트
 
@@ -52,6 +56,7 @@ pnpm check                                       # typecheck + lint + lint:dom +
 
 ## 문서
 
-- 설계: [docs/superpowers/specs/2026-05-13-bluesky-mac-translator-design.md](docs/superpowers/specs/2026-05-13-bluesky-mac-translator-design.md)
+- 설계: [docs/superpowers/specs/2026-05-15-claude-cli-backend-and-reply-translation-design.md](docs/superpowers/specs/2026-05-15-claude-cli-backend-and-reply-translation-design.md)
+- 초기 설계 (apfel 시절, 참조용): [docs/superpowers/specs/2026-05-13-bluesky-mac-translator-design.md](docs/superpowers/specs/2026-05-13-bluesky-mac-translator-design.md)
 - 트러블슈팅: [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
 - 릴리스 스모크: [docs/SMOKE.md](docs/SMOKE.md)

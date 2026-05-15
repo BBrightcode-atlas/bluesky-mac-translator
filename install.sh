@@ -15,7 +15,7 @@ step()  { printf "\n\033[1;34m▶ %s\033[0m\n" "$*"; }
 step "1/7  사전 점검"
 [ "$(uname -s)" = "Darwin" ] || { red "macOS 전용입니다."; exit 1; }
 if [ "$(uname -m)" != "arm64" ]; then
-  red "경고: Apple Silicon이 아닙니다. apfel은 Apple Silicon 전용."
+  red "경고: Apple Silicon이 아닙니다."
 fi
 mkdir -p "$INSTALL_DIR" "$LOG_DIR" "$NMH_DIR"
 
@@ -24,7 +24,14 @@ if ! command -v brew >/dev/null 2>&1; then
   red "Homebrew가 필요합니다: https://brew.sh"
   exit 1
 fi
-command -v apfel >/dev/null 2>&1 || brew install apfel
+if ! command -v claude >/dev/null 2>&1; then
+  red "claude CLI가 설치되어 있지 않습니다."
+  echo "  설치: npm i -g @anthropic-ai/claude-code"
+  echo "  설치 후 다시 실행하세요."
+  exit 1
+fi
+# 인증 점검 — 실패해도 경고만 (사용자가 빠른 진단 가능)
+claude --version >/dev/null 2>&1 || red "claude --version 실패 — 인증/설치 상태 점검하세요."
 command -v node  >/dev/null 2>&1 || brew install node
 command -v pnpm  >/dev/null 2>&1 || npm install -g pnpm@9.12.0
 
@@ -66,7 +73,7 @@ fi
 cat > "$NMH_DIR/$HOST_NAME.json" <<EOF
 {
   "name": "$HOST_NAME",
-  "description": "Bluesky Translator Host (manages apfel server)",
+  "description": "Bluesky Translator Host",
   "path": "$INSTALL_DIR/host-launcher.sh",
   "type": "stdio",
   "allowed_origins": ["chrome-extension://$EXT_ID/"]
@@ -78,4 +85,5 @@ step "7/7  검증"
 
 green ""
 green "✓ 설치 완료. https://bsky.app/ 을 새로고침하세요."
-green "  옵션 페이지: chrome-extension://$EXT_ID/options.html"
+green "  · claude 로그인 안 했으면 터미널에서: claude login"
+green "  · 옵션 페이지: chrome-extension://$EXT_ID/options.html"

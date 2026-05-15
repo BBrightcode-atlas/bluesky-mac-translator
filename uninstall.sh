@@ -11,15 +11,7 @@ echo
 read -r -p "정말 제거하시겠습니까? [y/N] " ans
 [ "$ans" = "y" ] || [ "$ans" = "Y" ] || exit 0
 
-pkill -f 'apfel.*--serve' || true
 rm -f "$NMH_DIR/$HOST_NAME.json"
-rm -rf "$INSTALL_DIR" "$LOG_DIR"
-
-echo
-read -r -p "apfel도 brew uninstall 하시겠습니까? [y/N] " ans2
-if [ "$ans2" = "y" ] || [ "$ans2" = "Y" ]; then
-  brew uninstall apfel || true
-fi
 
 echo
 echo "✓ 제거 완료. Chrome에서 'Bluesky Translator' 확장을 수동으로 제거하세요."
