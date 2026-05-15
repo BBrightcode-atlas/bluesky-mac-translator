@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.output/
+.wxt/
+*.log
+.DS_Store
+.env
+.env.local
+coverage/
+node-compile-cache/
+node-jiti/
+.gstack/

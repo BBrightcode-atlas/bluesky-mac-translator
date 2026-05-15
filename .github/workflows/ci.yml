@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Unsafe DOM guard
+        run: pnpm lint:dom
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build extension
+        run: pnpm --filter @flotter/bsky-translator-extension build
+
+      - name: Build host
+        run: pnpm --filter @flotter/bsky-translator-host build
+
+      - name: Shell syntax check
+        run: |
+          bash -n install.sh
+          bash -n uninstall.sh
+          bash -n scripts/doctor.sh
+          bash -n scripts/check-unsafe-dom.sh

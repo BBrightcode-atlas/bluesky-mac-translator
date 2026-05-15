@@ -1,0 +1,121 @@
+import { beforeEach, describe, expect, it } from 'vitest';
+import { mountTranslatorUI } from './inject-ui';
+
+beforeEach(() => {
+  while (document.body.firstChild) document.body.removeChild(document.body.firstChild);
+});
+
+function makePostWithText(): HTMLElement {
+  const post = document.createElement('div');
+  post.setAttribute('data-testid', 'feedItem-by-x');
+  const txt = document.createElement('div');
+  txt.setAttribute('data-testid', 'postText');
+  txt.textContent = 'hello';
+  post.appendChild(txt);
+  document.body.appendChild(post);
+  return post;
+}
+
+describe('mountTranslatorUI', () => {
+  it('bsky 기본 번역 a 가 있으면 그 자리에 host 마운트 + a 숨김', () => {
+    const post = document.createElement('div');
+    post.setAttribute('data-testid', 'feedItem-by-x');
+    const txt = document.createElement('div');
+    txt.setAttribute('data-testid', 'postText');
+    txt.textContent = 'hello';
+    post.appendChild(txt);
+    const wrap = document.createElement('div');
+    const bskyLink = document.createElement('a');
+    bskyLink.setAttribute('href', '#');
+    bskyLink.setAttribute('aria-label', '번역');
+    wrap.appendChild(bskyLink);
+    post.appendChild(wrap);
+    document.body.appendChild(post);
+
+    const handle = mountTranslatorUI(post);
+    expect(bskyLink.style.display).toBe('none');
+    expect(bskyLink.nextSibling).toBe(handle.host);
+    // postText 안에는 host 가 안 들어 있음 (fallback 경로 안 탐)
+    expect(txt.contains(handle.host)).toBe(false);
+  });
+
+  it('Shadow DOM host를 postText 안 마지막 자식으로 삽입 (bsky 링크 없을 때 fallback)', () => {
+    const post = makePostWithText();
+    const handle = mountTranslatorUI(post);
+    const postText = post.querySelector('[data-testid="postText"]') as HTMLElement;
+    expect(postText.lastChild).toBe(handle.host);
+    expect(postText.contains(handle.host)).toBe(true);
+    expect(handle.host.shadowRoot).not.toBeNull();
+  });
+
+  it('트리거 버튼은 "번역"', () => {
+    const handle = mountTranslatorUI(makePostWithText());
+    expect(handle.trigger.textContent).toBe('번역');
+    expect(handle.trigger.tagName).toBe('BUTTON');
+    expect(handle.trigger.getAttribute('type')).toBe('button');
+  });
+
+  it('언어 select는 더 이상 인라인 UI에 없음 (옵션 페이지에서만 선택)', () => {
+    const handle = mountTranslatorUI(makePostWithText());
+    expect(handle.host.shadowRoot?.querySelector('select.lang')).toBeNull();
+    expect((handle as unknown as { lang?: unknown }).lang).toBeUndefined();
+  });
+
+  it('result 박스는 초기에 hidden', () => {
+    expect(mountTranslatorUI(makePostWithText()).result.hidden).toBe(true);
+  });
+
+  it('appendChunk는 textContent 누적 (HTML 파싱 안 함)', () => {
+    const handle = mountTranslatorUI(makePostWithText());
+    handle.show();
+    handle.appendChunk('hi ');
+    handle.appendChunk('<script>x</script>');
+    expect(handle.result.textContent).toBe('hi <script>x</script>');
+    expect(handle.result.querySelector('script')).toBeNull();
+  });
+
+  it('showError는 메시지 + 재시도 버튼', () => {
+    const handle = mountTranslatorUI(makePostWithText());
+    let clicked = false;
+    handle.showError('실패', () => {
+      clicked = true;
+    });
+    const retry = handle.result.querySelector('button.retry') as HTMLButtonElement | null;
+    expect(retry).not.toBeNull();
+    expect(handle.result.dataset.state).toBe('error');
+    retry?.click();
+    expect(clicked).toBe(true);
+  });
+
+  it('showError 후 reset → appendChunk 하면 에러 흔적 없이 깨끗하게 렌더', () => {
+    const handle = mountTranslatorUI(makePostWithText());
+    handle.showError('실패', () => {});
+    expect(handle.result.dataset.state).toBe('error');
+    handle.reset();
+    handle.appendChunk('번역됨');
+    expect(handle.result.textContent).toBe('번역됨');
+    expect(handle.result.dataset.state).toBeUndefined();
+    expect(handle.result.querySelector('button.retry')).toBeNull();
+  });
+
+  it('showError 직후 reset 없이 appendChunk 해도 에러 노드를 깨뜨리지 않고 self-heal', () => {
+    const handle = mountTranslatorUI(makePostWithText());
+    handle.showError('실패', () => {});
+    // reset()을 건너뛰고 바로 appendChunk — ensureResultText가 result를 정리하고 재구성
+    handle.appendChunk('회복');
+    expect(handle.result.textContent).toBe('회복');
+    expect(handle.result.querySelector('button.retry')).toBeNull();
+    expect(handle.result.dataset.state).toBeUndefined();
+  });
+
+  it('reset은 result 내용을 비우고, destroy는 host를 DOM에서 제거', () => {
+    const post = makePostWithText();
+    const handle = mountTranslatorUI(post);
+    handle.appendChunk('내용');
+    handle.reset();
+    expect(handle.result.textContent).toBe('');
+    expect(post.contains(handle.host)).toBe(true);
+    handle.destroy();
+    expect(post.contains(handle.host)).toBe(false);
+  });
+});
