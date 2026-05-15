@@ -24,4 +24,20 @@ describe('parseStreamLine', () => {
     expect(parseStreamLine(JSON.stringify({ type: 'system', subtype: 'init' }))).toBeNull();
     expect(parseStreamLine(JSON.stringify({ type: 'result' }))).toBeNull();
   });
+
+  it('여러 text block은 이어붙여 반환', () => {
+    const line = JSON.stringify({
+      type: 'assistant',
+      message: { content: [{ type: 'text', text: 'A' }, { type: 'text', text: 'B' }] },
+    });
+    expect(parseStreamLine(line)).toBe('AB');
+  });
+
+  it('text block이 없으면 null', () => {
+    const line = JSON.stringify({
+      type: 'assistant',
+      message: { content: [{ type: 'tool_use', id: 'x' }] },
+    });
+    expect(parseStreamLine(line)).toBeNull();
+  });
 });
