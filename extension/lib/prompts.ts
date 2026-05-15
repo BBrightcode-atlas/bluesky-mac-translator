@@ -21,7 +21,7 @@ export interface ChatRequest {
 
 export function buildRequest(text: string, lang: TargetLang): ChatRequest {
   return {
-    model: 'apple-on-device',
+    model: 'apple-foundationmodel',
     messages: [
       { role: 'system', content: SYSTEM_PROMPTS[lang] },
       { role: 'user', content: text },

@@ -38,16 +38,6 @@ export function App() {
           value={settings.targetLang}
           onChange={(v) => void patch({ targetLang: v })}
         />
-        <div className="field">
-          <label>
-            <input
-              type="checkbox"
-              checked={settings.showLanguagePicker}
-              onChange={(e) => void patch({ showLanguagePicker: e.target.checked })}
-            />{' '}
-            게시물 옆에 ▾ 드롭다운 표시
-          </label>
-        </div>
         <EndpointEditor
           value={settings.apfelEndpoint}
           onChange={(v) => void patch({ apfelEndpoint: v })}

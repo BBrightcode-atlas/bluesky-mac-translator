@@ -1,5 +1,6 @@
 import { LruCache, cacheKey } from '@/lib/cache';
 import { Semaphore } from '@/lib/concurrency';
+import { dbg } from '@/lib/debug';
 import { type TranslatorHandle, mountTranslatorUI, setThemeTokens } from '@/lib/inject-ui';
 import { EnsureServerError, ensureServerReady } from '@/lib/nmh-client-content';
 import { extractPostText, findUnprocessedPosts, markProcessed } from '@/lib/post-detector';
@@ -7,18 +8,18 @@ import { type TargetLang, loadSettings, onSettingsChange } from '@/lib/storage';
 import { extractBskyTokens } from '@/lib/theme';
 import { TranslateError, translateStream } from '@/lib/translate';
 
+dbg('module-load', { href: typeof location !== 'undefined' ? location.href : null });
+
 export default defineContentScript({
   matches: ['https://bsky.app/*'],
   runAt: 'document_idle',
   async main() {
+    dbg('main-start', { href: location.href, readyState: document.readyState });
     let settings = await loadSettings();
+    dbg('settings-loaded', { lang: settings.targetLang, endpoint: settings.apfelEndpoint });
     const mounted = new Map<HTMLElement, TranslatorHandle>();
     onSettingsChange((s) => {
       settings = s;
-      for (const h of mounted.values()) {
-        h.lang.value = s.targetLang;
-        h.lang.style.display = s.showLanguagePicker ? '' : 'none';
-      }
     });
 
     const cache = new LruCache<string>(200);
@@ -26,23 +27,20 @@ export default defineContentScript({
 
     function attach(post: HTMLElement): void {
       const textOrNull = extractPostText(post);
-      if (!textOrNull) return;
+      if (!textOrNull) { dbg('attach-skip-no-text'); return; }
       const text: string = textOrNull;
       markProcessed(post);
+      dbg('attach-call', { textLen: text.length });
 
       const handle = mountTranslatorUI(post);
       setThemeTokens(handle.host, extractBskyTokens());
-      handle.lang.value = settings.targetLang;
-      handle.lang.style.display = settings.showLanguagePicker ? '' : 'none';
       mounted.set(post, handle);
 
       let abortCtl: AbortController | null = null;
       let visible = false;
-      let activeLang: TargetLang = settings.targetLang;
 
       async function runTranslate(): Promise<void> {
-        const langValue = handle.lang.value as TargetLang;
-        activeLang = langValue;
+        const langValue: TargetLang = settings.targetLang;
         handle.reset();
         handle.show();
         visible = true;
@@ -110,32 +108,38 @@ export default defineContentScript({
         }
         void runTranslate();
       });
-
-      handle.lang.addEventListener('change', () => {
-        const next = handle.lang.value as TargetLang;
-        if (next === activeLang) return;
-        void runTranslate();
-      });
     }
 
     function scan(root: ParentNode): void {
-      for (const post of findUnprocessedPosts(root)) {
+      const found = findUnprocessedPosts(root);
+      if (found.length > 0) {
+        dbg('scan', {
+          rootTag: (root as Element).tagName ?? 'doc',
+          found: found.length,
+        });
+      }
+      for (const post of found) {
         try {
           attach(post);
         } catch (e) {
           console.warn('[bsky-translator] attach failed', e);
+          dbg('attach-error', { msg: (e as Error).message });
         }
       }
     }
 
+    dbg('initial-scan-start');
     scan(document.body);
+    dbg('initial-scan-done', { mounted: mounted.size });
 
     const idleSchedule =
       (globalThis as { requestIdleCallback?: (cb: () => void) => void }).requestIdleCallback ??
       ((cb: () => void) => setTimeout(cb, 0));
 
     const observer = new MutationObserver((records) => {
+      dbg('observer-fire', { records: records.length });
       idleSchedule(() => {
+        dbg('idle-run', { records: records.length, mountedBefore: mounted.size });
         // bsky가 가상화 피드에서 post를 제거하면 mounted 항목이 누수됨.
         // 매 옵저버 틱마다 DOM에서 떨어진 post의 핸들을 정리한다.
         for (const [post, h] of mounted) {
@@ -144,16 +148,23 @@ export default defineContentScript({
             mounted.delete(post);
           }
         }
+        let addedElements = 0;
         for (const r of records) {
           for (const node of r.addedNodes) {
-            if (node instanceof HTMLElement) scan(node);
+            if (node instanceof HTMLElement) {
+              addedElements++;
+              scan(node);
+            }
           }
         }
+        dbg('idle-done', { addedElements, mountedAfter: mounted.size });
       });
     });
     observer.observe(document.body, { childList: true, subtree: true });
+    dbg('observer-installed');
 
     setTimeout(() => {
+      dbg('30s-mark', { mounted: mounted.size });
       if (mounted.size === 0) {
         console.warn('[bsky-translator] no posts detected after 30s; selectors may need update');
       }

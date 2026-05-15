@@ -32,10 +32,10 @@ describe('mountTranslatorUI', () => {
     expect(handle.trigger.getAttribute('type')).toBe('button');
   });
 
-  it('언어 select 옵션: ko/ja/zh', () => {
+  it('언어 select는 더 이상 인라인 UI에 없음 (옵션 페이지에서만 선택)', () => {
     const handle = mountTranslatorUI(makePostWithText());
-    const values = Array.from(handle.lang.options).map((o) => o.value);
-    expect(values).toEqual(['ko', 'ja', 'zh']);
+    expect(handle.host.shadowRoot?.querySelector('select.lang')).toBeNull();
+    expect((handle as unknown as { lang?: unknown }).lang).toBeUndefined();
   });
 
   it('result 박스는 초기에 hidden', () => {

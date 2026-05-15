@@ -1,11 +1,9 @@
 import injectedCss from '../styles/inject.css?raw';
 import { findPostTextNode } from './post-detector';
-import { LANG_OPTIONS } from './prompts';
 
 export interface TranslatorHandle {
   host: HTMLElement;
   trigger: HTMLButtonElement;
-  lang: HTMLSelectElement;
   result: HTMLDivElement;
   show(): void;
   hide(): void;
@@ -18,6 +16,12 @@ export interface TranslatorHandle {
 export function mountTranslatorUI(postEl: HTMLElement): TranslatorHandle {
   const host = document.createElement('div');
   host.className = 'flotter-translator-host';
+  // post 카드 전체가 클릭 가능한 link이므로 UI 내부 이벤트가
+  // 부모로 버블링되면 상세 페이지로 navigate된다. host에서 일괄 차단.
+  const stopBubble = (e: Event) => e.stopPropagation();
+  host.addEventListener('click', stopBubble);
+  host.addEventListener('pointerdown', stopBubble);
+  host.addEventListener('mousedown', stopBubble);
   const shadow = host.attachShadow({ mode: 'open' });
 
   const style = document.createElement('style');
@@ -32,16 +36,6 @@ export function mountTranslatorUI(postEl: HTMLElement): TranslatorHandle {
   trigger.className = 'trigger';
   trigger.textContent = '번역';
   row.appendChild(trigger);
-
-  const lang = document.createElement('select');
-  lang.className = 'lang';
-  for (const opt of LANG_OPTIONS) {
-    const optionEl = document.createElement('option');
-    optionEl.value = opt.value;
-    optionEl.textContent = opt.label;
-    lang.appendChild(optionEl);
-  }
-  row.appendChild(lang);
 
   const result = document.createElement('div') as HTMLDivElement;
   result.className = 'result';
@@ -74,7 +68,6 @@ export function mountTranslatorUI(postEl: HTMLElement): TranslatorHandle {
   return {
     host,
     trigger,
-    lang,
     result,
     show() {
       result.hidden = false;

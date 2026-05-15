@@ -3,14 +3,12 @@ export type TargetLang = 'ko' | 'ja' | 'zh';
 export interface Settings {
   targetLang: TargetLang;
   apfelEndpoint: string;
-  showLanguagePicker: boolean;
   autoRestartServer: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   targetLang: 'ko',
   apfelEndpoint: 'http://127.0.0.1:11434',
-  showLanguagePicker: true,
   autoRestartServer: true,
 };
 
