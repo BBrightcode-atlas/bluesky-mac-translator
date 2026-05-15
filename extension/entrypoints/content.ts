@@ -1,14 +1,52 @@
-import { LruCache, cacheKey } from '@/lib/cache';
-import { Semaphore } from '@/lib/concurrency';
 import { dbg } from '@/lib/debug';
 import { type TranslatorHandle, mountTranslatorUI, setThemeTokens } from '@/lib/inject-ui';
-import { EnsureServerError, ensureServerReady } from '@/lib/nmh-client-content';
 import { extractPostText, findUnprocessedPosts, markProcessed } from '@/lib/post-detector';
 import { type TargetLang, loadSettings, onSettingsChange } from '@/lib/storage';
 import { extractBskyTokens } from '@/lib/theme';
-import { TranslateError, translateStream } from '@/lib/translate';
 
 dbg('module-load', { href: typeof location !== 'undefined' ? location.href : null });
+
+function translateViaBackground(
+  payload:
+    | { type: 'translate'; mode: 'post'; text: string; targetLang: TargetLang }
+    | { type: 'translate'; mode: 'reply'; originalPost: string; reply: string },
+  onChunk: (t: string) => void,
+  onDone: () => void,
+  onError: (e: { code?: string; message: string }) => void,
+  signal: AbortSignal,
+): void {
+  const port = chrome.runtime.connect({ name: 'translate' });
+  let settled = false;
+  const settle = (fn: () => void) => {
+    if (settled) return;
+    settled = true;
+    fn();
+    try {
+      port.disconnect();
+    } catch {
+      // ignore
+    }
+  };
+  port.onMessage.addListener(
+    (m: { type: 'chunk' | 'done' | 'error'; text?: string; code?: string; message?: string }) => {
+      if (m.type === 'chunk' && typeof m.text === 'string') onChunk(m.text);
+      else if (m.type === 'done') settle(onDone);
+      else if (m.type === 'error') settle(() => onError({ code: m.code, message: m.message ?? 'error' }));
+    },
+  );
+  port.onDisconnect.addListener(() => {
+    const reason = chrome.runtime.lastError?.message ?? 'disconnected';
+    settle(() => onError({ message: reason }));
+  });
+  signal.addEventListener(
+    'abort',
+    () => {
+      settle(() => {});
+    },
+    { once: true },
+  );
+  port.postMessage({ kind: 'translate', payload });
+}
 
 export default defineContentScript({
   matches: ['https://bsky.app/*'],
@@ -16,14 +54,11 @@ export default defineContentScript({
   async main() {
     dbg('main-start', { href: location.href, readyState: document.readyState });
     let settings = await loadSettings();
-    dbg('settings-loaded', { lang: settings.targetLang, endpoint: settings.apfelEndpoint });
+    dbg('settings-loaded', { lang: settings.targetLang });
     const mounted = new Map<HTMLElement, TranslatorHandle>();
     onSettingsChange((s) => {
       settings = s;
     });
-
-    const cache = new LruCache<string>(200);
-    const sem = new Semaphore(4);
 
     function attach(post: HTMLElement): void {
       const textOrNull = extractPostText(post);
@@ -45,57 +80,41 @@ export default defineContentScript({
         handle.show();
         visible = true;
 
-        const key = await cacheKey(text, langValue);
-        const cached = cache.get(key);
-        if (cached) {
-          handle.appendChunk(cached);
-          handle.trigger.textContent = '번역 숨기기';
-          return;
-        }
-
         abortCtl?.abort();
         abortCtl = new AbortController();
         const signal = abortCtl.signal;
 
-        const release = await sem.acquire();
-        let localAcc = '';
+        let acc = '';
         const hangTimer = setTimeout(() => {
-          if (localAcc.length === 0) handle.appendChunk('응답 지연 중...');
+          if (acc.length === 0) handle.appendChunk('응답 지연 중...');
         }, 10_000);
 
-        try {
-          await ensureServerReady();
-          for await (const chunk of translateStream(
-            text,
-            langValue,
-            settings.apfelEndpoint,
-            signal,
-          )) {
-            if (signal.aborted) break;
-            if (localAcc.length === 0) handle.reset();
-            localAcc += chunk;
+        translateViaBackground(
+          { type: 'translate', mode: 'post', text, targetLang: langValue },
+          (chunk) => {
+            if (acc.length === 0) handle.reset();
+            acc += chunk;
             handle.appendChunk(chunk);
-          }
-          if (localAcc.length > 0) cache.set(key, localAcc);
-          handle.trigger.textContent = '번역 숨기기';
-        } catch (e) {
-          if ((e as Error).name === 'AbortError') return;
-          let msg: string;
-          if (e instanceof EnsureServerError && e.code === 'apfel_not_installed') {
-            msg =
-              'apfel이 설치되지 않았습니다. 터미널에서 brew install apfel 실행 후 다시 시도하세요.';
-          } else if (e instanceof TranslateError) {
-            msg = `번역 실패 — HTTP ${e.status}.`;
-          } else if (e instanceof Error) {
-            msg = `번역 실패 — ${e.message}.`;
-          } else {
-            msg = '번역 실패.';
-          }
-          handle.showError(msg, () => void runTranslate());
-        } finally {
-          clearTimeout(hangTimer);
-          release();
-        }
+          },
+          () => {
+            clearTimeout(hangTimer);
+            handle.trigger.textContent = '번역 숨기기';
+          },
+          (e) => {
+            clearTimeout(hangTimer);
+            const code = e.code;
+            let msg: string;
+            if (code === 'claude_not_found') {
+              msg = 'claude CLI가 설치되어 있지 않습니다. `npm i -g @anthropic-ai/claude-code` 후 다시 시도하세요.';
+            } else if (code === 'claude_auth') {
+              msg = 'claude 로그인이 필요합니다. 터미널에서 `claude login` 후 다시 시도하세요.';
+            } else {
+              msg = `번역 실패 — ${e.message}.`;
+            }
+            handle.showError(msg, () => void runTranslate());
+          },
+          signal,
+        );
       }
 
       handle.trigger.addEventListener('click', () => {
