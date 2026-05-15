@@ -1,7 +1,7 @@
 import { LruCache, cacheKey } from '@/lib/cache';
 import { Semaphore } from '@/lib/concurrency';
 import { type TranslatorHandle, mountTranslatorUI, setThemeTokens } from '@/lib/inject-ui';
-import { ensureServerReady } from '@/lib/nmh-client-content';
+import { EnsureServerError, ensureServerReady } from '@/lib/nmh-client-content';
 import { extractPostText, findUnprocessedPosts, markProcessed } from '@/lib/post-detector';
 import { type TargetLang, loadSettings, onSettingsChange } from '@/lib/storage';
 import { extractBskyTokens } from '@/lib/theme';
@@ -82,12 +82,17 @@ export default defineContentScript({
           handle.trigger.textContent = '번역 숨기기';
         } catch (e) {
           if ((e as Error).name === 'AbortError') return;
-          const msg =
-            e instanceof TranslateError
-              ? `번역 실패 — HTTP ${e.status}.`
-              : e instanceof Error
-                ? `번역 실패 — ${e.message}.`
-                : '번역 실패.';
+          let msg: string;
+          if (e instanceof EnsureServerError && e.code === 'apfel_not_installed') {
+            msg =
+              'apfel이 설치되지 않았습니다. 터미널에서 brew install apfel 실행 후 다시 시도하세요.';
+          } else if (e instanceof TranslateError) {
+            msg = `번역 실패 — HTTP ${e.status}.`;
+          } else if (e instanceof Error) {
+            msg = `번역 실패 — ${e.message}.`;
+          } else {
+            msg = '번역 실패.';
+          }
           handle.showError(msg, () => void runTranslate());
         } finally {
           clearTimeout(hangTimer);

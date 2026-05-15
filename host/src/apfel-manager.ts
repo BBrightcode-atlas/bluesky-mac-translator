@@ -126,6 +126,8 @@ export class ApfelManager {
       }
       throw new ApfelError('timeout', `apfel not ready in ${this.startTimeoutMs}ms`);
     } finally {
+      // The OS dup'd logFd into the spawned child, so closing the parent's copy
+      // here is safe and correct — the child keeps writing to apfel.log.
       closeSync(logFd);
     }
   }

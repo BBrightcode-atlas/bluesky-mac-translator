@@ -7,7 +7,7 @@ interface BgMessage {
   payload?: Request;
 }
 
-type BgReply = Response | { ok: true } | { ok: false; error: string };
+type BgReply = Response | { ok: true } | { ok: false; error: string; code?: string };
 
 // nmh-client's send() is single-in-flight (rejects 'NMH busy' on overlap).
 // Serialize all NMH access through a promise chain so concurrent extension
@@ -52,7 +52,7 @@ async function handle(msg: BgMessage): Promise<BgReply> {
         return { ok: true };
       }
       const res = await serializeNmh(() => send({ type: 'ensure_running' }));
-      if (res.type === 'error') return { ok: false, error: res.message };
+      if (res.type === 'error') return { ok: false, error: res.message, code: res.code };
       return { ok: true };
     }
     return { ok: false, error: 'unknown message kind' };
