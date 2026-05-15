@@ -1,6 +1,11 @@
 import { LruCache } from '@/lib/cache';
 import { streamRequest } from '@/lib/nmh-client';
-import type { Request, Response } from '../../host/src/types';
+import type { ErrorCode, Request, Response } from '../../host/src/types';
+
+function toErrorCode(c: string | undefined): ErrorCode {
+  if (c === 'claude_not_found' || c === 'claude_auth' || c === 'claude_failed') return c;
+  return 'claude_failed';
+}
 
 interface ClientMsg {
   kind: 'translate';
@@ -36,6 +41,9 @@ export default defineBackground({
       clientPort.onMessage.addListener((raw: unknown) => {
         const msg = raw as ClientMsg;
         if (msg.kind !== 'translate') return;
+        // Cancel any prior in-flight request from this port before starting a new one.
+        aborter?.abort();
+        aborter = null;
         void handle(msg.payload, clientPort, (a) => {
           aborter = a;
         });
@@ -55,8 +63,10 @@ async function handle(
   const key = await makeKey(payload);
   const cached = cache.get(key);
   if (cached) {
-    clientPort.postMessage({ type: 'chunk', text: cached } as Response);
-    clientPort.postMessage({ type: 'done' } as Response);
+    const chunkRes: Response = { type: 'chunk', text: cached };
+    const doneRes: Response = { type: 'done' };
+    clientPort.postMessage(chunkRes);
+    clientPort.postMessage(doneRes);
     return;
   }
 
@@ -68,18 +78,17 @@ async function handle(
     {
       onChunk: (text) => {
         acc += text;
-        clientPort.postMessage({ type: 'chunk', text } as Response);
+        const chunkRes: Response = { type: 'chunk', text };
+        clientPort.postMessage(chunkRes);
       },
       onDone: () => {
         if (acc.length > 0) cache.set(key, acc);
-        clientPort.postMessage({ type: 'done' } as Response);
+        const doneRes: Response = { type: 'done' };
+        clientPort.postMessage(doneRes);
       },
       onError: (e) => {
-        clientPort.postMessage({
-          type: 'error',
-          code: e.code as never,
-          message: e.message,
-        } as Response);
+        const res: Response = { type: 'error', code: toErrorCode(e.code), message: e.message };
+        clientPort.postMessage(res);
       },
     },
     ctl.signal,
