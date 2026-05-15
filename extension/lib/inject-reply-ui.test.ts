@@ -55,4 +55,48 @@ describe('mountReplyTranslatorUI', () => {
     h.destroy();
     expect(document.body.contains(h.host)).toBe(false);
   });
+
+  it('반영하기 버튼: 초기 hidden, showApply로 visible 되고 클릭 시 콜백 호출', () => {
+    const h = mountReplyTranslatorUI(makeCompose());
+    expect(h.applyBtn.hidden).toBe(true);
+    expect(h.applyBtn.textContent).toBe('반영하기');
+    let applied = 0;
+    h.showApply(() => {
+      applied++;
+    });
+    expect(h.applyBtn.hidden).toBe(false);
+    h.applyBtn.click();
+    expect(applied).toBe(1);
+  });
+
+  it('반영하기 콜백은 최신 showApply만 호출됨 (stale closure 안 쌓임)', () => {
+    const h = mountReplyTranslatorUI(makeCompose());
+    let stale = 0;
+    let fresh = 0;
+    h.showApply(() => {
+      stale++;
+    });
+    h.showApply(() => {
+      fresh++;
+    });
+    h.applyBtn.click();
+    expect(stale).toBe(0);
+    expect(fresh).toBe(1);
+  });
+
+  it('reset / showError / hideApply 모두 applyBtn 다시 hidden', () => {
+    const h = mountReplyTranslatorUI(makeCompose());
+    h.showApply(() => {});
+    expect(h.applyBtn.hidden).toBe(false);
+    h.reset();
+    expect(h.applyBtn.hidden).toBe(true);
+
+    h.showApply(() => {});
+    h.showError('x', () => {});
+    expect(h.applyBtn.hidden).toBe(true);
+
+    h.showApply(() => {});
+    h.hideApply();
+    expect(h.applyBtn.hidden).toBe(true);
+  });
 });

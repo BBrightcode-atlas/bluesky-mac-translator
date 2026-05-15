@@ -10,6 +10,42 @@ import { extractPostText, findUnprocessedPosts, markProcessed } from '@/lib/post
 import { type TargetLang, loadSettings, onSettingsChange } from '@/lib/storage';
 import { extractBskyTokens } from '@/lib/theme';
 
+// Bluesky's compose box is a ProseMirror (tiptap) contenteditable. Setting
+// textContent directly doesn't sync with the editor's internal state, so the
+// posted reply ignores the change. We simulate a paste event with translated
+// text after selecting all existing content; ProseMirror handles paste and
+// updates its state, which feeds into the reply submission.
+function applyTranslationToCompose(composeEl: HTMLElement, text: string): void {
+  composeEl.focus();
+  const sel = composeEl.ownerDocument.defaultView?.getSelection?.();
+  if (sel) {
+    const range = composeEl.ownerDocument.createRange();
+    range.selectNodeContents(composeEl);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+  // Some environments lack DataTransfer constructor (test). Guard.
+  try {
+    const dt = new DataTransfer();
+    dt.setData('text/plain', text);
+    const evt = new ClipboardEvent('paste', {
+      clipboardData: dt,
+      bubbles: true,
+      cancelable: true,
+    });
+    composeEl.dispatchEvent(evt);
+  } catch {
+    // Fallback: legacy execCommand. Deprecated but widely supported and ProseMirror handles it.
+    try {
+      composeEl.ownerDocument.execCommand('insertText', false, text);
+    } catch {
+      // last resort — direct text content (will not sync to ProseMirror state)
+      composeEl.textContent = text;
+    }
+  }
+}
+
+
 dbg('module-load', { href: typeof location !== 'undefined' ? location.href : null });
 
 function translateViaBackground(
@@ -173,6 +209,10 @@ export default defineContentScript({
           },
           () => {
             clearTimeout(hangTimer);
+            if (acc.length > 0) {
+              const translated = acc;
+              handle.showApply(() => applyTranslationToCompose(composeEl, translated));
+            }
           },
           (e) => {
             clearTimeout(hangTimer);

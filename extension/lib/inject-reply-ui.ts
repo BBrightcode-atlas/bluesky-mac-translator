@@ -3,12 +3,15 @@ import injectedCss from '../styles/inject.css?raw';
 export interface ReplyTranslatorHandle {
   host: HTMLElement;
   trigger: HTMLButtonElement;
+  applyBtn: HTMLButtonElement;
   result: HTMLDivElement;
   show(): void;
   hide(): void;
   reset(): void;
   appendChunk(chunk: string): void;
   showError(message: string, onRetry: () => void): void;
+  showApply(onApply: () => void): void;
+  hideApply(): void;
   destroy(): void;
 }
 
@@ -33,6 +36,21 @@ export function mountReplyTranslatorUI(composeEl: HTMLElement): ReplyTranslatorH
   trigger.textContent = '번역';
   row.appendChild(trigger);
 
+  const applyBtn = document.createElement('button');
+  applyBtn.type = 'button';
+  applyBtn.className = 'trigger apply';
+  applyBtn.textContent = '반영하기';
+  applyBtn.hidden = true;
+  row.appendChild(applyBtn);
+
+  // applyBtn click handler is set per-translation via showApply(); we keep a
+  // single listener and dispatch to the most recently registered callback so
+  // that re-translating doesn't accumulate stale closures.
+  let onApplyCb: (() => void) | null = null;
+  applyBtn.addEventListener('click', () => {
+    onApplyCb?.();
+  });
+
   const result = document.createElement('div') as HTMLDivElement;
   result.className = 'result';
   result.hidden = true;
@@ -56,6 +74,7 @@ export function mountReplyTranslatorUI(composeEl: HTMLElement): ReplyTranslatorH
   return {
     host,
     trigger,
+    applyBtn,
     result,
     show() {
       result.hidden = false;
@@ -68,6 +87,8 @@ export function mountReplyTranslatorUI(composeEl: HTMLElement): ReplyTranslatorH
       resultText.data = '';
       result.appendChild(resultText);
       result.removeAttribute('data-state');
+      applyBtn.hidden = true;
+      onApplyCb = null;
     },
     appendChunk(chunk) {
       result.removeAttribute('data-state');
@@ -87,6 +108,16 @@ export function mountReplyTranslatorUI(composeEl: HTMLElement): ReplyTranslatorH
       result.appendChild(document.createTextNode(' '));
       result.appendChild(retry);
       result.hidden = false;
+      applyBtn.hidden = true;
+      onApplyCb = null;
+    },
+    showApply(cb) {
+      onApplyCb = cb;
+      applyBtn.hidden = false;
+    },
+    hideApply() {
+      applyBtn.hidden = true;
+      onApplyCb = null;
     },
     destroy() {
       host.remove();
