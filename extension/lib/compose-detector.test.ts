@@ -27,8 +27,33 @@ function mountReplyFixture(opts: { withQuotedPost: boolean }): { compose: HTMLEl
   return { compose, quoted };
 }
 
+// Mirrors the real Bluesky reply modal shape observed 2026-05:
+// composePostView wraps the entire modal; inside it there's a plain
+// contenteditable DIV (no testid/role/aria) and a [data-testid="postText"]
+// for the quoted original post.
+function mountRealBlueskyReplyFixture(): { compose: HTMLElement; quoted: HTMLElement } {
+  const view = document.createElement('div');
+  view.setAttribute('data-testid', 'composePostView');
+  const postText = document.createElement('div');
+  postText.setAttribute('data-testid', 'postText');
+  postText.textContent = 'Original post body';
+  view.appendChild(postText);
+  const compose = document.createElement('div');
+  compose.setAttribute('contenteditable', 'true');
+  view.appendChild(compose);
+  document.body.appendChild(view);
+  return { compose, quoted: postText };
+}
+
 describe('findReplyComposer', () => {
-  it('reply (compose + quoted post) → 둘 다 반환', () => {
+  it('실제 Bluesky 모달 (composePostView + 평범한 contenteditable + postText) → 둘 다 반환', () => {
+    const { compose, quoted } = mountRealBlueskyReplyFixture();
+    const found = findReplyComposer(document);
+    expect(found?.composeEl).toBe(compose);
+    expect(found?.originalPostEl).toBe(quoted);
+  });
+
+  it('reply (compose + quoted post) → 둘 다 반환 (legacy fallback selectors)', () => {
     const { compose, quoted } = mountReplyFixture({ withQuotedPost: true });
     const found = findReplyComposer(document);
     expect(found?.composeEl).toBe(compose);

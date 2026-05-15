@@ -82,6 +82,16 @@ describe('extractPostText', () => {
     const el = makePost('feedItem-by-alice', '   ');
     expect(extractPostText(el)).toBeNull();
   });
+
+  it('postText element 자기 자신을 받으면 그 textContent 반환', () => {
+    // compose-detector returns the postText element directly (scoped inside
+    // composePostView). extractPostText must support self-match too.
+    const t = document.createElement('div');
+    t.setAttribute('data-testid', 'postText');
+    t.textContent = 'direct postText';
+    document.body.appendChild(t);
+    expect(extractPostText(t)).toBe('direct postText');
+  });
 });
 
 describe('findPostTextNode', () => {

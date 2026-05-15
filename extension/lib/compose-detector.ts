@@ -1,12 +1,9 @@
-const COMPOSE_SELECTORS = [
-  '[data-testid="composerTextInput"]',
-  '[role="textbox"][contenteditable="true"]', // fallback
-] as const;
-
-const QUOTED_POST_SELECTORS = [
-  '[data-testid="composerReplyTo"]',
-  // 필요 시 Step 1 실측 결과 추가
-] as const;
+// Real-world observation (Bluesky web, 2026-05): reply modal is wrapped in
+// `[data-testid="composePostView"]`. The contenteditable inside it carries no
+// testid/role/aria-placeholder, so we scope by composePostView first. The
+// quoted original post inside the modal also reuses the standard
+// `[data-testid="postText"]` element from feed posts.
+const COMPOSE_VIEW_SELECTOR = '[data-testid="composePostView"]';
 
 const PROCESSED_ATTR = 'data-translator-reply-mounted';
 
@@ -16,17 +13,39 @@ export interface ReplyComposerHit {
 }
 
 export function findReplyComposer(root: ParentNode): ReplyComposerHit | null {
-  let compose: HTMLElement | null = null;
-  for (const sel of COMPOSE_SELECTORS) {
-    compose = root.querySelector<HTMLElement>(sel);
-    if (compose) break;
+  // 1) Locate the compose modal container. If absent, no reply UI is open.
+  const composeView = root.querySelector<HTMLElement>(COMPOSE_VIEW_SELECTOR);
+  if (!composeView) {
+    // Test fixtures pre-dating composePostView: fall back to a broader heuristic
+    // (any contenteditable + any postText element). Production Bluesky always has
+    // composePostView, so this path mainly exists for the unit-test fixtures and
+    // older DOM revisions.
+    return findReplyComposerFallback(root);
   }
+
+  // 2) compose box: first contenteditable inside the modal.
+  const compose =
+    composeView.querySelector<HTMLElement>('[contenteditable="true"]') ??
+    composeView.querySelector<HTMLElement>('[role="textbox"]');
   if (!compose) return null;
-  let quoted: HTMLElement | null = null;
-  for (const sel of QUOTED_POST_SELECTORS) {
-    quoted = root.querySelector<HTMLElement>(sel);
-    if (quoted) break;
-  }
+
+  // 3) quoted original post: first postText inside the modal (it precedes the
+  //    compose box in DOM order, so querySelector returns the quote, not the
+  //    reply draft).
+  const quoted = composeView.querySelector<HTMLElement>('[data-testid="postText"]');
+  if (!quoted) return null;
+
+  return { composeEl: compose, originalPostEl: quoted };
+}
+
+function findReplyComposerFallback(root: ParentNode): ReplyComposerHit | null {
+  const compose =
+    root.querySelector<HTMLElement>('[data-testid="composerTextInput"]') ??
+    root.querySelector<HTMLElement>('[role="textbox"][contenteditable="true"]');
+  if (!compose) return null;
+  const quoted =
+    root.querySelector<HTMLElement>('[data-testid="composerReplyTo"]') ??
+    root.querySelector<HTMLElement>('[data-testid="postText"]');
   if (!quoted) return null;
   return { composeEl: compose, originalPostEl: quoted };
 }

@@ -37,7 +37,9 @@ export function extractPostText(post: HTMLElement): string | null {
   // querySelector returns first match in document order. For quote-posts (a post
   // embedding another), the outer post's postText precedes the nested one — so this
   // correctly extracts the outer post's text.
-  const node = post.querySelector(POST_TEXT_SELECTOR);
+  // Also support being called with the postText element itself (compose-detector
+  // returns the postText node directly when scoped inside composePostView).
+  const node = post.matches(POST_TEXT_SELECTOR) ? post : post.querySelector(POST_TEXT_SELECTOR);
   const text = node?.textContent?.trim() ?? '';
   return text.length > 0 ? text : null;
 }
