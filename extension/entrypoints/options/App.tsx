@@ -1,9 +1,7 @@
-import { type Settings, isLocalEndpoint, loadSettings, saveSettings } from '@/lib/storage';
+import { type Settings, loadSettings, saveSettings } from '@/lib/storage';
 import { useEffect, useState } from 'react';
-import { AutoRestartToggle } from './components/AutoRestartToggle';
-import { EndpointEditor } from './components/EndpointEditor';
+import { ClaudeStatus } from './components/ClaudeStatus';
 import { LanguageSelector } from './components/LanguageSelector';
-import { ServerStatus } from './components/ServerStatus';
 
 export function App() {
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -20,7 +18,6 @@ export function App() {
     try {
       await saveSettings(p);
     } catch (e) {
-      // 저장 실패 시 낙관적 업데이트를 되돌린다
       console.error('[bsky-translator] settings 저장 실패', e);
       setSettings(prev);
     }
@@ -38,22 +35,12 @@ export function App() {
           value={settings.targetLang}
           onChange={(v) => void patch({ targetLang: v })}
         />
-        <EndpointEditor
-          value={settings.apfelEndpoint}
-          onChange={(v) => void patch({ apfelEndpoint: v })}
-        />
-        <AutoRestartToggle
-          value={settings.autoRestartServer}
-          endpoint={settings.apfelEndpoint}
-          onChange={(v) => void patch({ autoRestartServer: v })}
-        />
       </div>
 
-      <ServerStatus endpointIsLocal={isLocalEndpoint(settings.apfelEndpoint)} />
+      <ClaudeStatus />
 
       <p className="muted">
-        ※ apfel이 미설치면 터미널에서 <span className="code">brew install apfel</span> 실행 후 이
-        페이지를 새로고침하세요.
+        ※ claude CLI는 한 번 <span className="code">claude login</span> 으로 인증해 두면 됩니다.
       </p>
     </div>
   );
