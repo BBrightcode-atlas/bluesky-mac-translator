@@ -8,10 +8,10 @@ export default defineConfig({
   }),
   manifest: {
     name: 'Bluesky Translator',
-    description: 'Translate Bluesky posts via Apple on-device LLM (apfel)',
-    version: '0.0.1',
+    description: 'Translate Bluesky posts and replies via Claude CLI',
+    version: '0.0.2',
     permissions: ['storage', 'nativeMessaging'],
-    host_permissions: ['https://bsky.app/*', 'http://127.0.0.1:11434/*'],
+    host_permissions: ['https://bsky.app/*'],
     options_ui: { page: 'options.html', open_in_tab: true },
     icons: {
       16: 'icon/16.png',
