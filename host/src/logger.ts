@@ -18,5 +18,3 @@ export function log(level: 'info' | 'warn' | 'error', msg: string, extra?: unkno
     // 디스크/권한 오류는 무시 (NMH는 계속 동작)
   }
 }
-
-export const apfelLogPath = `${homedir()}/Library/Logs/flotter-bsky-translator/apfel.log`;

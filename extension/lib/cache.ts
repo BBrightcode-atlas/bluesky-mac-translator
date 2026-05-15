@@ -1,5 +1,3 @@
-import type { TargetLang } from './storage';
-
 export class LruCache<V> {
   private readonly max: number;
   private readonly map = new Map<string, V>();
@@ -26,13 +24,4 @@ export class LruCache<V> {
       this.map.delete(oldest);
     }
   }
-}
-
-export async function cacheKey(text: string, lang: TargetLang): Promise<string> {
-  const buf = new TextEncoder().encode(text);
-  const hash = await crypto.subtle.digest('SHA-1', buf);
-  const hex = Array.from(new Uint8Array(hash))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-  return `${hex}:${lang}`;
 }

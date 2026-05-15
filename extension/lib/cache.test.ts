@@ -1,14 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LruCache, cacheKey } from './cache';
-
-describe('cacheKey', () => {
-  it('같은 입력이면 같은 키', async () => {
-    expect(await cacheKey('hello', 'ko')).toBe(await cacheKey('hello', 'ko'));
-  });
-  it('언어가 다르면 다른 키', async () => {
-    expect(await cacheKey('hello', 'ko')).not.toBe(await cacheKey('hello', 'ja'));
-  });
-});
+import { LruCache } from './cache';
 
 describe('LruCache', () => {
   it('set/get round-trip', () => {

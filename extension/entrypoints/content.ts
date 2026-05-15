@@ -161,6 +161,9 @@ export default defineContentScript({
         abortCtl?.abort();
         abortCtl = new AbortController();
         let acc = '';
+        const hangTimer = setTimeout(() => {
+          if (acc.length === 0) handle.appendChunk('응답 지연 중...');
+        }, 10_000);
         translateViaBackground(
           { type: 'translate', mode: 'reply', originalPost, reply },
           (chunk) => {
@@ -169,9 +172,10 @@ export default defineContentScript({
             handle.appendChunk(chunk);
           },
           () => {
-            // done
+            clearTimeout(hangTimer);
           },
           (e) => {
+            clearTimeout(hangTimer);
             let msg: string;
             if (e.code === 'claude_not_found')
               msg = 'claude CLI 미설치. `npm i -g @anthropic-ai/claude-code`.';
