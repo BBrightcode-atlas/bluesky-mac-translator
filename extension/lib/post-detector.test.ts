@@ -92,6 +92,15 @@ describe('extractPostText', () => {
     document.body.appendChild(t);
     expect(extractPostText(t)).toBe('direct postText');
   });
+
+  it('postText 자식/자신이 없으면 element의 textContent fallback', () => {
+    // current Bluesky reply modal: quoted post is a button with no postText
+    // testid. extractPostText must still return non-null text.
+    const btn = document.createElement('button');
+    btn.textContent = 'Author Name. Post body text here.';
+    document.body.appendChild(btn);
+    expect(extractPostText(btn)).toBe('Author Name. Post body text here.');
+  });
 });
 
 describe('findPostTextNode', () => {

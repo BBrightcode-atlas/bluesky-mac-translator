@@ -29,13 +29,30 @@ export function findReplyComposer(root: ParentNode): ReplyComposerHit | null {
     composeView.querySelector<HTMLElement>('[role="textbox"]');
   if (!compose) return null;
 
-  // 3) quoted original post: first postText inside the modal (it precedes the
-  //    compose box in DOM order, so querySelector returns the quote, not the
-  //    reply draft).
-  const quoted = composeView.querySelector<HTMLElement>('[data-testid="postText"]');
+  // 3) quoted original post. Observed Bluesky shape: the quoted post is a
+  //    `[role="button"]` containing a `[data-testid="userAvatarImage"]` of the
+  //    quoted author. There's no postText testid on this path. Prefer the
+  //    button (so its full textContent — author name + body — reaches the LLM
+  //    and gives it stronger language signal). Fall back to postText if a
+  //    future DOM revision adds it back.
+  const quoted = findQuotedOriginalPost(composeView);
   if (!quoted) return null;
 
   return { composeEl: compose, originalPostEl: quoted };
+}
+
+function findQuotedOriginalPost(composeView: HTMLElement): HTMLElement | null {
+  // Preferred: postText element directly (legacy + future DOM).
+  const direct = composeView.querySelector<HTMLElement>('[data-testid="postText"]');
+  if (direct) return direct;
+
+  // Current Bluesky: first userAvatarImage's closest role=button.
+  const firstAvatar = composeView.querySelector<HTMLElement>('[data-testid="userAvatarImage"]');
+  if (firstAvatar) {
+    const btn = firstAvatar.closest<HTMLElement>('[role="button"]');
+    if (btn && composeView.contains(btn)) return btn;
+  }
+  return null;
 }
 
 function findReplyComposerFallback(root: ParentNode): ReplyComposerHit | null {

@@ -39,8 +39,12 @@ export function extractPostText(post: HTMLElement): string | null {
   // correctly extracts the outer post's text.
   // Also support being called with the postText element itself (compose-detector
   // returns the postText node directly when scoped inside composePostView).
+  // Final fallback: if no postText descendant/self exists (current Bluesky reply
+  // modal — the quoted post is a [role="button"] with no postText testid), use
+  // the element's own textContent. The LLM tolerates the author name prefix in
+  // exchange for stronger language signal.
   const node = post.matches(POST_TEXT_SELECTOR) ? post : post.querySelector(POST_TEXT_SELECTOR);
-  const text = node?.textContent?.trim() ?? '';
+  const text = (node?.textContent ?? post.textContent)?.trim() ?? '';
   return text.length > 0 ? text : null;
 }
 
