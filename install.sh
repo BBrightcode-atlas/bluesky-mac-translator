@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_URL="${BMT_REPO_URL:-https://github.com/flotter-atlas/bluesky-mac-translator.git}"
+REPO_URL="${BMT_REPO_URL:-https://github.com/bbrightcode-atlas/bluesky-mac-translator.git}"
 INSTALL_DIR="$HOME/Library/Application Support/flotter-bsky-translator"
 SRC_DIR="$INSTALL_DIR/src"
 LOG_DIR="$HOME/Library/Logs/flotter-bsky-translator"
