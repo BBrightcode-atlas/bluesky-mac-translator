@@ -1,5 +1,11 @@
 import { dbg } from '@/lib/debug';
+import {
+  findReplyComposer,
+  isReplyComposerProcessed,
+  markReplyComposerProcessed,
+} from '@/lib/compose-detector';
 import { type TranslatorHandle, mountTranslatorUI, setThemeTokens } from '@/lib/inject-ui';
+import { mountReplyTranslatorUI, type ReplyTranslatorHandle } from '@/lib/inject-reply-ui';
 import { extractPostText, findUnprocessedPosts, markProcessed } from '@/lib/post-detector';
 import { type TargetLang, loadSettings, onSettingsChange } from '@/lib/storage';
 import { extractBskyTokens } from '@/lib/theme';
@@ -56,6 +62,7 @@ export default defineContentScript({
     let settings = await loadSettings();
     dbg('settings-loaded', { lang: settings.targetLang });
     const mounted = new Map<HTMLElement, TranslatorHandle>();
+    const mountedReplies = new Map<HTMLElement, { handle: ReplyTranslatorHandle; originalPostEl: HTMLElement }>();
     onSettingsChange((s) => {
       settings = s;
     });
@@ -129,6 +136,56 @@ export default defineContentScript({
       });
     }
 
+    function attachReply(composeEl: HTMLElement, originalPostEl: HTMLElement): void {
+      if (isReplyComposerProcessed(composeEl)) return;
+      markReplyComposerProcessed(composeEl);
+      const handle = mountReplyTranslatorUI(composeEl);
+      setThemeTokens(handle.host, extractBskyTokens());
+      mountedReplies.set(composeEl, { handle, originalPostEl });
+
+      let abortCtl: AbortController | null = null;
+
+      function runReplyTranslate(): void {
+        const reply = composeEl.textContent?.trim() ?? '';
+        if (!reply) {
+          handle.showError('내용을 먼저 작성하세요.', () => runReplyTranslate());
+          return;
+        }
+        const originalPost = extractPostText(originalPostEl);
+        if (!originalPost) {
+          handle.showError('원 포스트 텍스트를 찾을 수 없습니다.', () => runReplyTranslate());
+          return;
+        }
+        handle.reset();
+        handle.show();
+        abortCtl?.abort();
+        abortCtl = new AbortController();
+        let acc = '';
+        translateViaBackground(
+          { type: 'translate', mode: 'reply', originalPost, reply },
+          (chunk) => {
+            if (acc.length === 0) handle.reset();
+            acc += chunk;
+            handle.appendChunk(chunk);
+          },
+          () => {
+            // done
+          },
+          (e) => {
+            let msg: string;
+            if (e.code === 'claude_not_found')
+              msg = 'claude CLI 미설치. `npm i -g @anthropic-ai/claude-code`.';
+            else if (e.code === 'claude_auth') msg = 'claude 로그인 필요. 터미널에서 `claude login`.';
+            else msg = `번역 실패 — ${e.message}.`;
+            handle.showError(msg, () => runReplyTranslate());
+          },
+          abortCtl.signal,
+        );
+      }
+
+      handle.trigger.addEventListener('click', () => runReplyTranslate());
+    }
+
     function scan(root: ParentNode): void {
       const found = findUnprocessedPosts(root);
       if (found.length > 0) {
@@ -149,6 +206,8 @@ export default defineContentScript({
 
     dbg('initial-scan-start');
     scan(document.body);
+    const initialReply = findReplyComposer(document);
+    if (initialReply) attachReply(initialReply.composeEl, initialReply.originalPostEl);
     dbg('initial-scan-done', { mounted: mounted.size });
 
     const idleSchedule =
@@ -176,6 +235,19 @@ export default defineContentScript({
             }
           }
         }
+
+        // reply composer scan (document-wide; bsky composes a single modal at a time)
+        const reply = findReplyComposer(document);
+        if (reply) attachReply(reply.composeEl, reply.originalPostEl);
+
+        // clean up reply mounts whose compose element fell out of DOM
+        for (const [el, entry] of mountedReplies) {
+          if (!el.isConnected) {
+            entry.handle.destroy();
+            mountedReplies.delete(el);
+          }
+        }
+
         dbg('idle-done', { addedElements, mountedAfter: mounted.size });
       });
     });
