@@ -2,14 +2,10 @@ export type TargetLang = 'ko' | 'ja' | 'zh';
 
 export interface Settings {
   targetLang: TargetLang;
-  apfelEndpoint: string;
-  autoRestartServer: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   targetLang: 'ko',
-  apfelEndpoint: 'http://127.0.0.1:11434',
-  autoRestartServer: true,
 };
 
 export async function loadSettings(): Promise<Settings> {
@@ -33,13 +29,4 @@ export function onSettingsChange(handler: (s: Settings) => void): () => void {
   };
   chrome.storage.onChanged.addListener(listener);
   return () => chrome.storage.onChanged.removeListener(listener);
-}
-
-export function isLocalEndpoint(endpoint: string): boolean {
-  try {
-    const u = new URL(endpoint);
-    return ['127.0.0.1', 'localhost', '::1', '[::1]'].includes(u.hostname);
-  } catch {
-    return false;
-  }
 }
