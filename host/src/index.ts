@@ -79,6 +79,7 @@ let currentAbort: AbortController | null = null;
 async function handle(req: Request): Promise<void> {
   if (req.type === 'diagnose') {
     send(await diagnose());
+    send({ type: 'done' });
     return;
   }
   if (req.type === 'translate') {

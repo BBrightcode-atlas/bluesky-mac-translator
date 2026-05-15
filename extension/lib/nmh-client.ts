@@ -1,69 +1,82 @@
+// extension/lib/nmh-client.ts
 import type { Request, Response } from '../../host/src/types';
 
 const HOST_NAME = 'com.flotter.bsky_translator';
-const STATUS_CACHE_TTL_MS = 2000;
 
-interface StatusCache {
-  at: number;
-  value: Response;
+export interface StreamCallbacks {
+  onChunk: (text: string) => void;
+  onDone: () => void;
+  onError: (err: { code?: string; message: string }) => void;
+  onDiagnoseResult?: (r: Extract<Response, { type: 'diagnose_result' }>) => void;
 }
 
-interface Pending {
-  resolve: (res: Response) => void;
-  reject: (err: Error) => void;
-}
-
-let port: chrome.runtime.Port | null = null;
-let pending: Pending | null = null;
-let statusCache: StatusCache | null = null;
-
-function connect(): chrome.runtime.Port {
-  if (port) return port;
-  const p = chrome.runtime.connectNative(HOST_NAME);
-  p.onMessage.addListener((msg: Response) => {
-    const cb = pending;
-    pending = null;
-    cb?.resolve(msg);
-  });
-  p.onDisconnect.addListener(() => {
-    port = null;
-    const cb = pending;
-    pending = null;
-    const reason = chrome.runtime.lastError?.message ?? 'disconnected';
-    cb?.reject(new Error(`NMH ${reason}`));
-  });
-  port = p;
-  return p;
-}
-
-export async function send(req: Request): Promise<Response> {
-  if (req.type === 'status' && statusCache && Date.now() - statusCache.at < STATUS_CACHE_TTL_MS) {
-    return statusCache.value;
+export function streamRequest(req: Request, cb: StreamCallbacks, signal: AbortSignal): void {
+  let port: chrome.runtime.Port | null;
+  try {
+    port = chrome.runtime.connectNative(HOST_NAME);
+  } catch (e) {
+    cb.onError({ message: e instanceof Error ? e.message : String(e) });
+    return;
   }
-  const p = connect();
-  return new Promise<Response>((resolve, reject) => {
-    if (pending) {
-      reject(new Error('NMH busy'));
-      return;
-    }
-    pending = {
-      resolve: (res) => {
-        if (req.type === 'status' && res.type === 'status') {
-          statusCache = { at: Date.now(), value: res };
-        }
-        resolve(res);
-      },
-      reject,
-    };
+  let settled = false;
+  const settle = (fn: () => void) => {
+    if (settled) return;
+    settled = true;
+    fn();
     try {
-      p.postMessage(req);
-    } catch (e) {
-      pending = null;
-      reject(e instanceof Error ? e : new Error(String(e)));
+      port?.disconnect();
+    } catch {
+      // ignore
+    }
+  };
+
+  port.onMessage.addListener((msg: Response) => {
+    if (msg.type === 'chunk') cb.onChunk(msg.text);
+    else if (msg.type === 'done') settle(cb.onDone);
+    else if (msg.type === 'error') settle(() => cb.onError({ code: msg.code, message: msg.message }));
+    else if (msg.type === 'diagnose_result') {
+      cb.onDiagnoseResult?.(msg);
+      // diagnose는 result 1회 → host가 곧 done 보냄
     }
   });
+  port.onDisconnect.addListener(() => {
+    const reason = chrome.runtime.lastError?.message ?? 'disconnected';
+    settle(() => cb.onError({ message: `NMH ${reason}` }));
+  });
+  signal.addEventListener(
+    'abort',
+    () => {
+      settle(() => cb.onError({ message: 'aborted' }));
+    },
+    { once: true },
+  );
+  try {
+    port.postMessage(req);
+  } catch (e) {
+    settle(() => cb.onError({ message: e instanceof Error ? e.message : String(e) }));
+  }
 }
 
-export function invalidateStatusCache(): void {
-  statusCache = null;
+export async function diagnose(): Promise<
+  Extract<Response, { type: 'diagnose_result' }> | { type: 'error'; code?: string; message: string }
+> {
+  return new Promise((resolve) => {
+    const ctl = new AbortController();
+    let captured: Extract<Response, { type: 'diagnose_result' }> | null = null;
+    streamRequest(
+      { type: 'diagnose' },
+      {
+        onChunk: () => {},
+        onDiagnoseResult: (r) => {
+          captured = r;
+        },
+        onDone: () => {
+          if (captured) resolve(captured);
+          else resolve({ type: 'error', message: 'no diagnose_result' });
+        },
+        onError: (e) => resolve({ type: 'error', code: e.code, message: e.message }),
+      },
+      ctl.signal,
+    );
+  });
 }
