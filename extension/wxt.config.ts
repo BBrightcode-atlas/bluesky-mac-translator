@@ -2,7 +2,10 @@ import react from '@vitejs/plugin-react';
 import { defineConfig } from 'wxt';
 
 export default defineConfig({
-  vite: () => ({ plugins: [react()] }),
+  vite: () => ({
+    plugins: [react()],
+    build: { minify: false, sourcemap: 'inline' },
+  }),
   manifest: {
     name: 'Bluesky Translator',
     description: 'Translate Bluesky posts via Apple on-device LLM (apfel)',
