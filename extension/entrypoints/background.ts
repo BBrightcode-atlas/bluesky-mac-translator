@@ -1,28 +1,25 @@
-import { send } from '@/lib/nmh-client';
-import { isLocalEndpoint, loadSettings } from '@/lib/storage';
+import { LruCache } from '@/lib/cache';
+import { streamRequest } from '@/lib/nmh-client';
 import type { Request, Response } from '../../host/src/types';
 
-interface BgMessage {
-  kind: 'nmh' | 'ensure_ready';
-  payload?: Request;
+interface ClientMsg {
+  kind: 'translate';
+  payload: Extract<Request, { type: 'translate' }>;
 }
 
-type BgReply = Response | { ok: true } | { ok: false; error: string; code?: string };
+const cache = new LruCache<string>(200);
 
-// nmh-client's send() is single-in-flight (rejects 'NMH busy' on overlap).
-// Serialize all NMH access through a promise chain so concurrent extension
-// messages (e.g. options page status poll + content script ensure_ready) queue
-// instead of failing.
-let nmhChain: Promise<unknown> = Promise.resolve();
-
-function serializeNmh<T>(fn: () => Promise<T>): Promise<T> {
-  const run = nmhChain.then(fn, fn);
-  // keep the chain alive even if fn rejects; swallow here so the chain doesn't break
-  nmhChain = run.then(
-    () => undefined,
-    () => undefined,
-  );
-  return run;
+async function makeKey(p: Extract<Request, { type: 'translate' }>): Promise<string> {
+  const stable =
+    p.mode === 'post'
+      ? JSON.stringify({ mode: 'post', text: p.text, targetLang: p.targetLang })
+      : JSON.stringify({ mode: 'reply', originalPost: p.originalPost, reply: p.reply });
+  const buf = new TextEncoder().encode(stable);
+  const hash = await crypto.subtle.digest('SHA-256', buf);
+  const hex = Array.from(new Uint8Array(hash))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+  return `${p.mode}:${hex}`;
 }
 
 export default defineBackground({
@@ -33,30 +30,58 @@ export default defineBackground({
       }
     });
 
-    chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-      void handle(msg as BgMessage).then(sendResponse);
-      return true; // keep the message channel open for the async response
+    chrome.runtime.onConnect.addListener((clientPort: chrome.runtime.Port) => {
+      if (clientPort.name !== 'translate') return;
+      let aborter: AbortController | null = null;
+      clientPort.onMessage.addListener((raw: unknown) => {
+        const msg = raw as ClientMsg;
+        if (msg.kind !== 'translate') return;
+        void handle(msg.payload, clientPort, (a) => {
+          aborter = a;
+        });
+      });
+      clientPort.onDisconnect.addListener(() => {
+        aborter?.abort();
+      });
     });
   },
 });
 
-async function handle(msg: BgMessage): Promise<BgReply> {
-  try {
-    if (msg.kind === 'nmh' && msg.payload) {
-      const payload = msg.payload;
-      return await serializeNmh(() => send(payload));
-    }
-    if (msg.kind === 'ensure_ready') {
-      const settings = await loadSettings();
-      if (!isLocalEndpoint(settings.apfelEndpoint)) {
-        return { ok: true };
-      }
-      const res = await serializeNmh(() => send({ type: 'ensure_running' }));
-      if (res.type === 'error') return { ok: false, error: res.message, code: res.code };
-      return { ok: true };
-    }
-    return { ok: false, error: 'unknown message kind' };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+async function handle(
+  payload: Extract<Request, { type: 'translate' }>,
+  clientPort: chrome.runtime.Port,
+  setAborter: (a: AbortController) => void,
+): Promise<void> {
+  const key = await makeKey(payload);
+  const cached = cache.get(key);
+  if (cached) {
+    clientPort.postMessage({ type: 'chunk', text: cached } as Response);
+    clientPort.postMessage({ type: 'done' } as Response);
+    return;
   }
+
+  const ctl = new AbortController();
+  setAborter(ctl);
+  let acc = '';
+  streamRequest(
+    payload,
+    {
+      onChunk: (text) => {
+        acc += text;
+        clientPort.postMessage({ type: 'chunk', text } as Response);
+      },
+      onDone: () => {
+        if (acc.length > 0) cache.set(key, acc);
+        clientPort.postMessage({ type: 'done' } as Response);
+      },
+      onError: (e) => {
+        clientPort.postMessage({
+          type: 'error',
+          code: e.code as never,
+          message: e.message,
+        } as Response);
+      },
+    },
+    ctl.signal,
+  );
 }
