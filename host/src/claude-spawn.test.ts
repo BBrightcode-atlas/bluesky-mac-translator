@@ -4,14 +4,11 @@ import { Readable } from 'node:stream';
 import { runClaude } from './claude-spawn';
 
 function fakeChild(stdoutLines: string[], opts: { exitCode?: number; stderr?: string; spawnError?: NodeJS.ErrnoException } = {}) {
-  const ee = new EventEmitter() as EventEmitter & {
-    stdout: Readable;
-    stderr: Readable;
-    kill: (sig: string) => void;
-  };
-  ee.stdout = Readable.from(stdoutLines.map((l) => `${l}\n`));
-  ee.stderr = Readable.from([opts.stderr ?? '']);
-  ee.kill = vi.fn();
+  const ee = new EventEmitter();
+  const stdout = Readable.from(stdoutLines.map((l) => `${l}\n`));
+  const stderr = Readable.from([opts.stderr ?? '']);
+  const kill = vi.fn();
+  Object.assign(ee, { stdout, stderr, kill });
   setTimeout(() => {
     if (opts.spawnError) {
       ee.emit('error', opts.spawnError);
@@ -19,7 +16,7 @@ function fakeChild(stdoutLines: string[], opts: { exitCode?: number; stderr?: st
     }
     ee.emit('close', opts.exitCode ?? 0);
   }, 0);
-  return ee;
+  return ee as typeof ee & { stdout: Readable; stderr: Readable; kill: typeof kill };
 }
 
 describe('runClaude', () => {
@@ -39,7 +36,7 @@ describe('runClaude', () => {
         onChunk: (t) => chunks.push(t),
         onDone: () => events.push('done'),
         onError: () => events.push('err'),
-        spawner: spawner as never,
+        spawner: spawner,
       },
     );
     expect(chunks).toEqual(['안', '녕']);
@@ -61,7 +58,7 @@ describe('runClaude', () => {
         onChunk: () => {},
         onDone: () => {},
         onError: (e) => events.push(e),
-        spawner: spawner as never,
+        spawner: spawner,
       },
     );
     expect(events).toEqual([{ code: 'claude_not_found', message: expect.stringContaining('claude') as unknown as string }]);
@@ -78,7 +75,7 @@ describe('runClaude', () => {
         onChunk: () => {},
         onDone: () => {},
         onError: (e) => events.push(e),
-        spawner: spawner as never,
+        spawner: spawner,
       },
     );
     expect(events[0]?.code).toBe('claude_auth');
@@ -95,7 +92,7 @@ describe('runClaude', () => {
         onChunk: () => {},
         onDone: () => {},
         onError: (e) => events.push(e),
-        spawner: spawner as never,
+        spawner: spawner,
       },
     );
     expect(events[0]?.code).toBe('claude_failed');
