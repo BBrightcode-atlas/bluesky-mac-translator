@@ -2,12 +2,13 @@
 
 ![icon](extension/public/icon/128.png)
 
-**bsky.app의 외국어 게시물과 답글을 [Claude](https://claude.com/)로 번역하는 Chrome 확장.**
+**bsky.app과 publish.buffer.com에서 [Claude](https://claude.com/)로 번역하는 Chrome 확장.**
 
-- 게시물 본문 아래 **번역** 버튼 한 번에 인라인 스트리밍 번역 (Bluesky 기본의 Google Translate 새 탭 대신)
-- 답글 작성 시 한국어로 쓰고 **번역** 누르면 원 포스트 언어로 자동 번역, **반영하기**로 compose에 적용
+지원 사이트 및 기능:
+- **Bluesky** (`bsky.app`) — 게시물 본문 인라인 번역 + 답글 작성 시 원 포스트 언어로 자동 번역 + 새 글 작성 번역
+- **Buffer** (`publish.buffer.com`) — Create Post composer + Community 댓글 본문 번역 + 답글 작성 번역
 - API key가 확장에 저장되지 않음 — 사용자 머신의 `claude` CLI를 통해서만 호출
-- 어떤 분석/추적/광고 없음
+- 분석/추적/광고 없음
 
 > ⚠️ **사전 요구사항**: macOS + [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) (`claude login` 까지 완료) + Chrome. claude의 API 호출 비용은 사용자의 Anthropic 계정으로 청구됩니다.
 
@@ -45,25 +46,36 @@ curl -fsSL https://raw.githubusercontent.com/bbrightcode-atlas/bluesky-mac-trans
 
 ## 사용법
 
-### 게시물 번역
+### Bluesky 게시물 번역
 
 Bluesky 피드 또는 thread 페이지에서 외국어 포스트 본문 옆의 **번역** 링크를 클릭. 스트리밍 응답이 인라인으로 뜹니다. 한 번 더 누르면 접힙니다.
 
 기본 번역 대상 언어는 옵션 페이지에서 한국어/일본어/중국어 중 선택.
 
-### 답글 번역
+### Bluesky 답글 / 새 글 번역
 
-외국인 포스트에 답글 모달을 열고 한국어로 작성한 다음, compose 박스 아래의 **번역** 버튼을 누르세요. 답글 텍스트가 원 포스트의 언어로 번역되어 미리보기로 표시됩니다.
+외국인 포스트에 답글 모달을 열고 한국어로 작성한 다음, compose 박스 아래의 **번역** 버튼을 누르세요. 답글 텍스트가 원 포스트의 언어로 번역되어 미리보기로 표시됩니다. 새 글(답글이 아닌) 모달에도 같은 UI가 뜨며, 이 경우 대상 언어는 옵션 페이지의 "Buffer 작성 번역 언어" setting을 따릅니다.
 
 - **반영하기** 버튼을 누르면 compose 박스 내용이 번역문으로 교체됩니다 (Cmd+Z로 복구 가능).
 - compose 텍스트는 자동으로 바뀌지 않으므로, 미리보기를 확인한 후 직접 반영 여부를 결정합니다.
+
+### Buffer Create Post (publish.buffer.com)
+
+`+ New Post` → 채널 선택 → compose 영역에 한국어로 작성 → 하단 toolbar(media/gif/emoji 아이콘 줄)에 **번역** 버튼이 자리잡습니다. 클릭 시 옵션 페이지의 "Buffer 작성 번역 언어" 로 번역되고, **반영하기**로 compose에 적용.
+
+### Buffer Community 댓글
+
+`Community` → 게시물 클릭 → 댓글 thread:
+- 외국어 댓글 본문 아래 **번역** 버튼 — 한국어로 미리보기
+- 답글 작성 textarea 아래 **번역** 버튼 — 한국어 답글을 부모 댓글의 언어로 번역 + **반영하기**로 textarea에 적용
 
 ### 옵션 페이지
 
 확장 아이콘 우클릭 → "옵션" 또는 `chrome://extensions` → 확장 카드 → "확장 프로그램 옵션".
 
-- 기본 번역 대상 언어 (게시물 번역에 사용)
-- Claude CLI 진단 (경로 / 버전 표시)
+- **번역 대상 언어 (Bluesky 게시물 읽기)** — bsky 외국어 게시물을 어떤 언어로 읽을지 (한국어/일본어/중국어).
+- **Buffer 작성 번역 언어** — Buffer composer + Bluesky 새 글 작성에서 한국어 → 어떤 외국어로 번역할지 (English/일본어/중국어/한국어).
+- Claude CLI 진단 — 경로 / 버전 표시.
 
 ---
 
@@ -106,11 +118,12 @@ Bluesky 피드 또는 thread 페이지에서 외국어 포스트 본문 옆의 *
 
 | 권한 | 이유 |
 |---|---|
-| `storage` | 기본 번역 언어 1개 필드 (`targetLang`) 저장 |
+| `storage` | 두 개 setting 필드 (`targetLang` 게시물 읽기, `bufferTargetLang` compose 작성) 저장 |
 | `nativeMessaging` | macOS에 설치된 NMH host와 stdio 통신 |
 | `host_permissions: https://bsky.app/*` | bsky.app DOM에 번역 UI 주입 + 포스트 텍스트 읽기 |
+| `host_permissions: https://publish.buffer.com/*` | Buffer composer + community 댓글 DOM에 번역 UI 주입 |
 
-Bluesky 외 다른 사이트에는 접근하지 않습니다. 분석/광고/추적 코드 없음.
+위 두 사이트 외 어떤 사이트에도 접근하지 않습니다. 분석/광고/추적 코드 없음.
 
 자세한 데이터 처리: [Privacy Policy](https://bbrightcode-atlas.github.io/bluesky-mac-translator/PRIVACY)
 
