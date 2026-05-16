@@ -10,3 +10,4 @@ coverage/
 node-compile-cache/
 node-jiti/
 .gstack/
+.playwright-mcp/
