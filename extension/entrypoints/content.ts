@@ -487,12 +487,10 @@ export default defineContentScript({
       const { formEl, textarea, parentComment } = hit;
       if (isBufferReplyFormProcessed(formEl)) return;
       markBufferReplyFormProcessed(formEl);
-      // Mount under the reply form (form's last child) — not inside the footer
-      // toolbar. The toolbar is a `publish_nowrap` flex row, so our host being
-      // a row item squeezes the character counter ("0/280") into vertical
-      // letters when the translation result expands. Placing the host as a
-      // new line below the footer keeps the toolbar layout intact.
-      const handle = mountReplyTranslatorUI(textarea, { el: formEl, position: 'append' });
+      // Mount directly after the textarea (its parent is a flex-column wrapper
+      // around the textarea) — host lands between the textarea and the footer
+      // toolbar, on its own line.
+      const handle = mountReplyTranslatorUI(textarea, { el: textarea, position: 'after' });
       setThemeTokens(handle.host, extractBskyTokens());
       mountedBufferReplyForms.set(formEl, handle);
 
