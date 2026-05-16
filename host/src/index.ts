@@ -37,15 +37,18 @@ function runOneShot(bin: string, args: string[]): Promise<string> {
   });
 }
 
-function buildPostPrompt(text: string, targetLang: 'ko' | 'ja' | 'zh'): string {
+function buildPostPrompt(text: string, targetLang: 'ko' | 'ja' | 'zh' | 'en'): string {
   // INTENTIONAL DUPLICATE of extension/lib/prompts.ts buildPostPrompt — extension and host
-  // are independent builds and can't share imports. The Phase 2 Task 7 rewrite of
-  // extension/lib/prompts.ts produces the same strings as this function. If you change one,
-  // change the other in the same PR. Until Phase 2 lands, extension/lib/prompts.ts is still
-  // the apfel-era SYSTEM_PROMPTS — temporary mismatch by design.
-  const langName = { ko: 'Korean (한국어)', ja: 'Japanese (日本語)', zh: 'Simplified Chinese (简体中文)' }[targetLang];
+  // are independent builds and can't share imports. Keep the two functions producing
+  // identical strings; if you change one, change the other in the same PR.
+  const langName = {
+    ko: 'Korean (한국어)',
+    ja: 'Japanese (日本語)',
+    zh: 'Simplified Chinese (简体中文)',
+    en: 'English',
+  }[targetLang];
   return [
-    `You are a translator for social media posts on Bluesky.`,
+    `You are a translator for social media posts.`,
     `Translate the user's text into natural, casual ${langName} as it would be written by a native SNS user.`,
     `Rules: Output ONLY the translation. No prefix, no quotes, no explanation.`,
     `Preserve @mentions, URLs, #hashtags, and emoji verbatim.`,

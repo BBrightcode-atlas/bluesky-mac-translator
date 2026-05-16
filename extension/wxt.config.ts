@@ -8,10 +8,10 @@ export default defineConfig({
   }),
   manifest: {
     name: 'Bluesky Translator',
-    description: 'Translate Bluesky posts and replies via Claude CLI',
-    version: '0.0.2',
+    description: 'Translate Bluesky and Buffer posts/replies via Claude CLI',
+    version: '0.0.3',
     permissions: ['storage', 'nativeMessaging'],
-    host_permissions: ['https://bsky.app/*'],
+    host_permissions: ['https://bsky.app/*', 'https://publish.buffer.com/*'],
     options_ui: { page: 'options.html', open_in_tab: true },
     icons: {
       16: 'icon/16.png',

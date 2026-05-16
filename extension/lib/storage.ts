@@ -1,11 +1,16 @@
 export type TargetLang = 'ko' | 'ja' | 'zh';
+// Compose-side target languages for buffer (user writes in their own language,
+// translates outward to publish). Kept narrow to avoid bloating the dropdown.
+export type ComposeTargetLang = 'en' | 'ja' | 'zh' | 'ko';
 
 export interface Settings {
   targetLang: TargetLang;
+  bufferTargetLang: ComposeTargetLang;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   targetLang: 'ko',
+  bufferTargetLang: 'en',
 };
 
 export async function loadSettings(): Promise<Settings> {

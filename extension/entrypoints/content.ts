@@ -1,5 +1,10 @@
 import { dbg } from '@/lib/debug';
 import {
+  findBufferComposers,
+  isBufferComposerProcessed,
+  markBufferComposerProcessed,
+} from '@/lib/buffer-detector';
+import {
   findReplyComposer,
   isReplyComposerProcessed,
   markReplyComposerProcessed,
@@ -7,7 +12,7 @@ import {
 import { type TranslatorHandle, mountTranslatorUI, setThemeTokens } from '@/lib/inject-ui';
 import { mountReplyTranslatorUI, type ReplyTranslatorHandle } from '@/lib/inject-reply-ui';
 import { extractPostText, findUnprocessedPosts, markProcessed } from '@/lib/post-detector';
-import { type TargetLang, loadSettings, onSettingsChange } from '@/lib/storage';
+import { type ComposeTargetLang, type TargetLang, loadSettings, onSettingsChange } from '@/lib/storage';
 import { extractBskyTokens } from '@/lib/theme';
 
 // Bluesky's compose box is a ProseMirror (tiptap) contenteditable. Setting
@@ -50,7 +55,12 @@ dbg('module-load', { href: typeof location !== 'undefined' ? location.href : nul
 
 function translateViaBackground(
   payload:
-    | { type: 'translate'; mode: 'post'; text: string; targetLang: TargetLang }
+    | {
+        type: 'translate';
+        mode: 'post';
+        text: string;
+        targetLang: TargetLang | ComposeTargetLang;
+      }
     | { type: 'translate'; mode: 'reply'; originalPost: string; reply: string },
   onChunk: (t: string) => void,
   onDone: () => void,
@@ -91,7 +101,7 @@ function translateViaBackground(
 }
 
 export default defineContentScript({
-  matches: ['https://bsky.app/*'],
+  matches: ['https://bsky.app/*', 'https://publish.buffer.com/*'],
   runAt: 'document_idle',
   async main() {
     dbg('main-start', { href: location.href, readyState: document.readyState });
@@ -230,6 +240,76 @@ export default defineContentScript({
       handle.trigger.addEventListener('click', () => runReplyTranslate());
     }
 
+    // Buffer composer (publish.buffer.com). Reuses the reply UI widget — same
+    // pattern (compose-aware "번역" → preview → "반영하기"), but the target
+    // language is the user's bufferTargetLang setting (defaults to 'en')
+    // instead of being inferred from a quoted post.
+    const mountedBuffer = new Map<HTMLElement, ReplyTranslatorHandle>();
+
+    function attachBufferCompose(composeEl: HTMLElement): void {
+      if (isBufferComposerProcessed(composeEl)) return;
+      markBufferComposerProcessed(composeEl);
+      const handle = mountReplyTranslatorUI(composeEl);
+      setThemeTokens(handle.host, extractBskyTokens());
+      mountedBuffer.set(composeEl, handle);
+
+      let abortCtl: AbortController | null = null;
+
+      function runBufferTranslate(): void {
+        const text = composeEl.textContent?.trim() ?? '';
+        if (!text) {
+          handle.showError('내용을 먼저 작성하세요.', () => runBufferTranslate());
+          return;
+        }
+        const targetLang = settings.bufferTargetLang;
+        handle.reset();
+        handle.show();
+        abortCtl?.abort();
+        abortCtl = new AbortController();
+        let acc = '';
+        const hangTimer = setTimeout(() => {
+          if (acc.length === 0) handle.appendChunk('응답 지연 중...');
+        }, 15_000);
+        translateViaBackground(
+          { type: 'translate', mode: 'post', text, targetLang },
+          (chunk) => {
+            if (acc.length === 0) handle.reset();
+            acc += chunk;
+            handle.appendChunk(chunk);
+          },
+          () => {
+            clearTimeout(hangTimer);
+            if (acc.length > 0) {
+              const translated = acc;
+              handle.showApply(() => applyTranslationToCompose(composeEl, translated));
+            }
+          },
+          (e) => {
+            clearTimeout(hangTimer);
+            let msg: string;
+            if (e.code === 'claude_not_found')
+              msg = 'claude CLI 미설치. `npm i -g @anthropic-ai/claude-code`.';
+            else if (e.code === 'claude_auth') msg = 'claude 로그인 필요. 터미널에서 `claude login`.';
+            else msg = `번역 실패 — ${e.message}.`;
+            handle.showError(msg, () => runBufferTranslate());
+          },
+          abortCtl.signal,
+        );
+      }
+
+      handle.trigger.addEventListener('click', () => runBufferTranslate());
+    }
+
+    function scanBufferComposers(): void {
+      for (const c of findBufferComposers(document)) attachBufferCompose(c);
+      for (const [el, h] of mountedBuffer) {
+        if (!el.isConnected) {
+          h.destroy();
+          mountedBuffer.delete(el);
+        }
+      }
+    }
+
     function scan(root: ParentNode): void {
       const found = findUnprocessedPosts(root);
       if (found.length > 0) {
@@ -248,11 +328,17 @@ export default defineContentScript({
       }
     }
 
+    const IS_BSKY = location.host === 'bsky.app';
+    const IS_BUFFER = location.host === 'publish.buffer.com';
+
     dbg('initial-scan-start');
-    scan(document.body);
-    const initialReply = findReplyComposer(document);
-    if (initialReply) attachReply(initialReply.composeEl, initialReply.originalPostEl);
-    dbg('initial-scan-done', { mounted: mounted.size });
+    if (IS_BSKY) {
+      scan(document.body);
+      const initialReply = findReplyComposer(document);
+      if (initialReply) attachReply(initialReply.composeEl, initialReply.originalPostEl);
+    }
+    if (IS_BUFFER) scanBufferComposers();
+    dbg('initial-scan-done', { mounted: mounted.size, bufferMounts: mountedBuffer.size });
 
     const idleSchedule =
       (globalThis as { requestIdleCallback?: (cb: () => void) => void }).requestIdleCallback ??
@@ -262,46 +348,55 @@ export default defineContentScript({
       dbg('observer-fire', { records: records.length });
       idleSchedule(() => {
         dbg('idle-run', { records: records.length, mountedBefore: mounted.size });
-        // bsky가 가상화 피드에서 post를 제거하면 mounted 항목이 누수됨.
-        // 매 옵저버 틱마다 DOM에서 떨어진 post의 핸들을 정리한다.
-        for (const [post, h] of mounted) {
-          if (!post.isConnected) {
-            h.destroy();
-            mounted.delete(post);
-          }
-        }
-        let addedElements = 0;
-        for (const r of records) {
-          for (const node of r.addedNodes) {
-            if (node instanceof HTMLElement) {
-              addedElements++;
-              scan(node);
+        if (IS_BSKY) {
+          // bsky가 가상화 피드에서 post를 제거하면 mounted 항목이 누수됨.
+          // 매 옵저버 틱마다 DOM에서 떨어진 post의 핸들을 정리한다.
+          for (const [post, h] of mounted) {
+            if (!post.isConnected) {
+              h.destroy();
+              mounted.delete(post);
             }
           }
-        }
-
-        // reply composer scan (document-wide; bsky composes a single modal at a time)
-        const reply = findReplyComposer(document);
-        if (reply) attachReply(reply.composeEl, reply.originalPostEl);
-
-        // clean up reply mounts whose compose element fell out of DOM
-        for (const [el, entry] of mountedReplies) {
-          if (!el.isConnected) {
-            entry.handle.destroy();
-            mountedReplies.delete(el);
+          let addedElements = 0;
+          for (const r of records) {
+            for (const node of r.addedNodes) {
+              if (node instanceof HTMLElement) {
+                addedElements++;
+                scan(node);
+              }
+            }
           }
-        }
 
-        dbg('idle-done', { addedElements, mountedAfter: mounted.size });
+          // reply composer scan (document-wide; bsky composes a single modal at a time)
+          const reply = findReplyComposer(document);
+          if (reply) attachReply(reply.composeEl, reply.originalPostEl);
+
+          // clean up reply mounts whose compose element fell out of DOM
+          for (const [el, entry] of mountedReplies) {
+            if (!el.isConnected) {
+              entry.handle.destroy();
+              mountedReplies.delete(el);
+            }
+          }
+
+          dbg('idle-done', { addedElements, mountedAfter: mounted.size });
+        }
+        if (IS_BUFFER) {
+          scanBufferComposers();
+          dbg('buffer-idle-done', { bufferMounts: mountedBuffer.size });
+        }
       });
     });
     observer.observe(document.body, { childList: true, subtree: true });
     dbg('observer-installed');
 
     setTimeout(() => {
-      dbg('30s-mark', { mounted: mounted.size });
-      if (mounted.size === 0) {
+      dbg('30s-mark', { mounted: mounted.size, bufferMounts: mountedBuffer.size });
+      if (IS_BSKY && mounted.size === 0) {
         console.warn('[bsky-translator] no posts detected after 30s; selectors may need update');
+      }
+      if (IS_BUFFER && mountedBuffer.size === 0) {
+        console.warn('[bsky-translator] no Buffer composers after 30s; open Create Post to activate');
       }
     }, 30_000);
   },
