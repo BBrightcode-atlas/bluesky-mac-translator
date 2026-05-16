@@ -5,8 +5,11 @@ import {
   markBufferComposerProcessed,
 } from '@/lib/buffer-detector';
 import {
+  findNewPostComposer,
   findReplyComposer,
+  isNewPostComposerProcessed,
   isReplyComposerProcessed,
+  markNewPostComposerProcessed,
   markReplyComposerProcessed,
 } from '@/lib/compose-detector';
 import { type TranslatorHandle, mountTranslatorUI, setThemeTokens } from '@/lib/inject-ui';
@@ -240,6 +243,68 @@ export default defineContentScript({
       handle.trigger.addEventListener('click', () => runReplyTranslate());
     }
 
+    // Bluesky "new post" composer (no quoted post — root-level new post modal).
+    // Same compose-aware "번역" + "반영하기" pattern as Buffer; target language
+    // is settings.bufferTargetLang (shared compose-direction setting).
+    const mountedNewPosts = new Map<HTMLElement, ReplyTranslatorHandle>();
+
+    function attachNewPostCompose(composeEl: HTMLElement): void {
+      if (isNewPostComposerProcessed(composeEl)) return;
+      markNewPostComposerProcessed(composeEl);
+      // Mount as direct nextSibling of the contenteditable — bluesky's new-post
+      // modal doesn't have a separate toolbar testid like Buffer's, but the
+      // sibling slot inside composePostView renders cleanly below the editor.
+      const handle = mountReplyTranslatorUI(composeEl);
+      setThemeTokens(handle.host, extractBskyTokens());
+      mountedNewPosts.set(composeEl, handle);
+
+      let abortCtl: AbortController | null = null;
+
+      function runNewPostTranslate(): void {
+        const text = composeEl.textContent?.trim() ?? '';
+        if (!text) {
+          handle.showError('내용을 먼저 작성하세요.', () => runNewPostTranslate());
+          return;
+        }
+        const targetLang = settings.bufferTargetLang;
+        handle.reset();
+        handle.show();
+        abortCtl?.abort();
+        abortCtl = new AbortController();
+        let acc = '';
+        const hangTimer = setTimeout(() => {
+          if (acc.length === 0) handle.appendChunk('응답 지연 중...');
+        }, 15_000);
+        translateViaBackground(
+          { type: 'translate', mode: 'post', text, targetLang },
+          (chunk) => {
+            if (acc.length === 0) handle.reset();
+            acc += chunk;
+            handle.appendChunk(chunk);
+          },
+          () => {
+            clearTimeout(hangTimer);
+            if (acc.length > 0) {
+              const translated = acc;
+              handle.showApply(() => applyTranslationToCompose(composeEl, translated));
+            }
+          },
+          (e) => {
+            clearTimeout(hangTimer);
+            let msg: string;
+            if (e.code === 'claude_not_found')
+              msg = 'claude CLI 미설치. `npm i -g @anthropic-ai/claude-code`.';
+            else if (e.code === 'claude_auth') msg = 'claude 로그인 필요. 터미널에서 `claude login`.';
+            else msg = `번역 실패 — ${e.message}.`;
+            handle.showError(msg, () => runNewPostTranslate());
+          },
+          abortCtl.signal,
+        );
+      }
+
+      handle.trigger.addEventListener('click', () => runNewPostTranslate());
+    }
+
     // Buffer composer (publish.buffer.com). Reuses the reply UI widget — same
     // pattern (compose-aware "번역" → preview → "반영하기"), but the target
     // language is the user's bufferTargetLang setting (defaults to 'en')
@@ -343,9 +408,11 @@ export default defineContentScript({
       scan(document.body);
       const initialReply = findReplyComposer(document);
       if (initialReply) attachReply(initialReply.composeEl, initialReply.originalPostEl);
+      const initialNewPost = findNewPostComposer(document);
+      if (initialNewPost) attachNewPostCompose(initialNewPost);
     }
     if (IS_BUFFER) scanBufferComposers();
-    dbg('initial-scan-done', { mounted: mounted.size, bufferMounts: mountedBuffer.size });
+    dbg('initial-scan-done', { mounted: mounted.size, bufferMounts: mountedBuffer.size, newPostMounts: mountedNewPosts.size });
 
     const idleSchedule =
       (globalThis as { requestIdleCallback?: (cb: () => void) => void }).requestIdleCallback ??
@@ -378,6 +445,11 @@ export default defineContentScript({
           const reply = findReplyComposer(document);
           if (reply) attachReply(reply.composeEl, reply.originalPostEl);
 
+          // new-post composer scan (modal opens/closes; quoted post absence
+          // distinguishes it from reply — findNewPostComposer guards this)
+          const newPost = findNewPostComposer(document);
+          if (newPost) attachNewPostCompose(newPost);
+
           // clean up reply mounts whose compose element fell out of DOM
           for (const [el, entry] of mountedReplies) {
             if (!el.isConnected) {
@@ -385,8 +457,15 @@ export default defineContentScript({
               mountedReplies.delete(el);
             }
           }
+          // clean up new-post mounts likewise
+          for (const [el, h] of mountedNewPosts) {
+            if (!el.isConnected) {
+              h.destroy();
+              mountedNewPosts.delete(el);
+            }
+          }
 
-          dbg('idle-done', { addedElements, mountedAfter: mounted.size });
+          dbg('idle-done', { addedElements, mountedAfter: mounted.size, newPostMounts: mountedNewPosts.size });
         }
         if (IS_BUFFER) {
           scanBufferComposers();

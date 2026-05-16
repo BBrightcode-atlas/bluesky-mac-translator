@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { findReplyComposer } from './compose-detector';
+import { findNewPostComposer, findReplyComposer } from './compose-detector';
 
 beforeEach(() => {
   while (document.body.firstChild) document.body.removeChild(document.body.firstChild);
@@ -117,5 +117,34 @@ describe('findReplyComposer', () => {
   });
   it('compose 자체가 없음 → null', () => {
     expect(findReplyComposer(document)).toBeNull();
+  });
+});
+
+describe('findNewPostComposer', () => {
+  it('composePostView + contenteditable + quoted post 없음 → compose 반환', () => {
+    const view = document.createElement('div');
+    view.setAttribute('data-testid', 'composePostView');
+    const compose = document.createElement('div');
+    compose.setAttribute('contenteditable', 'true');
+    view.appendChild(compose);
+    document.body.appendChild(view);
+    expect(findNewPostComposer(document)).toBe(compose);
+  });
+
+  it('quoted post 있으면 (=답글) null — findReplyComposer가 처리', () => {
+    const view = document.createElement('div');
+    view.setAttribute('data-testid', 'composePostView');
+    const postText = document.createElement('div');
+    postText.setAttribute('data-testid', 'postText');
+    view.appendChild(postText);
+    const compose = document.createElement('div');
+    compose.setAttribute('contenteditable', 'true');
+    view.appendChild(compose);
+    document.body.appendChild(view);
+    expect(findNewPostComposer(document)).toBeNull();
+  });
+
+  it('composePostView 없음 → null', () => {
+    expect(findNewPostComposer(document)).toBeNull();
   });
 });

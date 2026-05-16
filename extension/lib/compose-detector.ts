@@ -74,3 +74,30 @@ export function isReplyComposerProcessed(el: HTMLElement): boolean {
 export function markReplyComposerProcessed(el: HTMLElement): void {
   el.setAttribute(PROCESSED_ATTR, '1');
 }
+
+// Bluesky's "new post" modal — same composePostView shell, same contenteditable
+// editor, but NO quoted post block (composerReplyTo / userAvatarImage button).
+// We return the compose element only; the caller mounts a generic compose
+// translator (settings.bufferTargetLang as target language, same as Buffer).
+const NEW_POST_PROCESSED_ATTR = 'data-translator-newpost-mounted';
+
+export function findNewPostComposer(root: ParentNode): HTMLElement | null {
+  const composeView = root.querySelector<HTMLElement>(COMPOSE_VIEW_SELECTOR);
+  if (!composeView) return null;
+  const compose =
+    composeView.querySelector<HTMLElement>('[contenteditable="true"]') ??
+    composeView.querySelector<HTMLElement>('[role="textbox"]');
+  if (!compose) return null;
+  // If a quoted post is present, this is a reply — let findReplyComposer
+  // handle it instead. We only return for the genuinely new-post case.
+  if (findQuotedOriginalPost(composeView)) return null;
+  return compose;
+}
+
+export function isNewPostComposerProcessed(el: HTMLElement): boolean {
+  return el.hasAttribute(NEW_POST_PROCESSED_ATTR);
+}
+
+export function markNewPostComposerProcessed(el: HTMLElement): void {
+  el.setAttribute(NEW_POST_PROCESSED_ATTR, '1');
+}
