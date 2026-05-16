@@ -249,7 +249,15 @@ export default defineContentScript({
     function attachBufferCompose(composeEl: HTMLElement): void {
       if (isBufferComposerProcessed(composeEl)) return;
       markBufferComposerProcessed(composeEl);
-      const handle = mountReplyTranslatorUI(composeEl);
+      // Buffer's composer is nested inside a publish_composerUploadDropzone
+      // wrapper. Mounting as composeEl.nextSibling lands the host *inside*
+      // that dropzone, where it visually overlaps the "Drag & drop or select
+      // a file" placeholder. Walk up to the dropzone (or editorContainer as
+      // fallback) and mount after that wrapper so the host sits outside.
+      const dropzone = composeEl.closest<HTMLElement>('[class*="UploadDropzone"]');
+      const editor = composeEl.closest<HTMLElement>('[class*="editorContainer"]');
+      const targetEl = dropzone ?? editor ?? composeEl;
+      const handle = mountReplyTranslatorUI(composeEl, { el: targetEl, position: 'after' });
       setThemeTokens(handle.host, extractBskyTokens());
       mountedBuffer.set(composeEl, handle);
 
