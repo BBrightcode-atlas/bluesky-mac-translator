@@ -249,15 +249,14 @@ export default defineContentScript({
     function attachBufferCompose(composeEl: HTMLElement): void {
       if (isBufferComposerProcessed(composeEl)) return;
       markBufferComposerProcessed(composeEl);
-      // Buffer's composer is nested inside a publish_composerUploadDropzone
-      // wrapper. Mounting as composeEl.nextSibling lands the host *inside*
-      // that dropzone, where it visually overlaps the "Drag & drop or select
-      // a file" placeholder. Walk up to the dropzone (or editorContainer as
-      // fallback) and mount after that wrapper so the host sits outside.
-      const dropzone = composeEl.closest<HTMLElement>('[class*="UploadDropzone"]');
-      const editor = composeEl.closest<HTMLElement>('[class*="editorContainer"]');
-      const targetEl = dropzone ?? editor ?? composeEl;
-      const handle = mountReplyTranslatorUI(composeEl, { el: targetEl, position: 'after' });
+      // Mount inside Buffer's bottom integrations toolbar (media/gif/emoji
+      // icons sit there). Scoped to the closest dialog so thread-mode
+      // multi-composer setups each target their own toolbar.
+      const dialog = composeEl.closest<HTMLElement>('[role="dialog"]') ?? document;
+      const integrationsBar = dialog.querySelector<HTMLElement>('[data-testid="integrations-bar"]');
+      const targetEl = integrationsBar ?? composeEl;
+      const position: 'append' | 'after' = integrationsBar ? 'append' : 'after';
+      const handle = mountReplyTranslatorUI(composeEl, { el: targetEl, position });
       setThemeTokens(handle.host, extractBskyTokens());
       mountedBuffer.set(composeEl, handle);
 
