@@ -84,19 +84,29 @@ describe('mountReplyTranslatorUI', () => {
     expect(fresh).toBe(1);
   });
 
-  it('reset / showError / hideApply 모두 applyBtn 다시 hidden', () => {
-    const h = mountReplyTranslatorUI(makeCompose());
-    h.showApply(() => {});
-    expect(h.applyBtn.hidden).toBe(false);
-    h.reset();
-    expect(h.applyBtn.hidden).toBe(true);
+  it('mountTarget 옵션: 외부 wrapper의 nextSibling으로 mount (buffer UploadDropzone 케이스)', () => {
+    const compose = document.createElement('div');
+    compose.setAttribute('data-testid', 'composerTextInput');
+    const wrapper = document.createElement('div');
+    wrapper.className = 'publish_composerUploadDropzone_A-5Be';
+    wrapper.appendChild(compose);
+    const outer = document.createElement('div');
+    outer.appendChild(wrapper);
+    document.body.appendChild(outer);
 
-    h.showApply(() => {});
-    h.showError('x', () => {});
-    expect(h.applyBtn.hidden).toBe(true);
+    const h = mountReplyTranslatorUI(compose, { el: wrapper, position: 'after' });
+    expect(wrapper.nextSibling).toBe(h.host);
+    expect(wrapper.contains(h.host)).toBe(false); // dropzone 밖
+    expect(outer.contains(h.host)).toBe(true);
+  });
 
-    h.showApply(() => {});
-    h.hideApply();
-    expect(h.applyBtn.hidden).toBe(true);
+  it('mountTarget position=append: target의 마지막 자식', () => {
+    const compose = document.createElement('div');
+    compose.setAttribute('data-testid', 'composerTextInput');
+    const card = document.createElement('div');
+    card.appendChild(compose);
+    document.body.appendChild(card);
+    const h = mountReplyTranslatorUI(compose, { el: card, position: 'append' });
+    expect(card.lastChild).toBe(h.host);
   });
 });

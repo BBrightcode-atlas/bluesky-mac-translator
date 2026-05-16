@@ -1,17 +1,28 @@
-import { LANG_OPTIONS } from '@/lib/prompts';
-import type { TargetLang } from '@/lib/storage';
-
-interface Props {
-  value: TargetLang;
-  onChange: (v: TargetLang) => void;
+interface Option<T extends string> {
+  value: T;
+  label: string;
 }
 
-export function LanguageSelector({ value, onChange }: Props) {
+interface Props<T extends string> {
+  label: string;
+  options: ReadonlyArray<Option<T>>;
+  value: T;
+  onChange: (v: T) => void;
+  id?: string;
+}
+
+export function LanguageSelector<T extends string>({
+  label,
+  options,
+  value,
+  onChange,
+  id = 'lang',
+}: Props<T>) {
   return (
     <div className="field">
-      <label htmlFor="lang">번역 대상 언어</label>
-      <select id="lang" value={value} onChange={(e) => onChange(e.target.value as TargetLang)}>
-        {LANG_OPTIONS.map((o) => (
+      <label htmlFor={id}>{label}</label>
+      <select id={id} value={value} onChange={(e) => onChange(e.target.value as T)}>
+        {options.map((o) => (
           <option key={o.value} value={o.value}>
             {o.label}
           </option>

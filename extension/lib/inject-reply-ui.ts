@@ -15,9 +15,28 @@ export interface ReplyTranslatorHandle {
   destroy(): void;
 }
 
-export function mountReplyTranslatorUI(composeEl: HTMLElement): ReplyTranslatorHandle {
+/**
+ * Where to insert the translator host element relative to `el`.
+ *  - 'after'  : host becomes el.nextSibling (default; works for bluesky reply).
+ *  - 'append' : host becomes el's last child.
+ */
+export interface MountTarget {
+  el: HTMLElement;
+  position: 'after' | 'append';
+}
+
+export function mountReplyTranslatorUI(
+  composeEl: HTMLElement,
+  mountTarget?: MountTarget,
+): ReplyTranslatorHandle {
   const host = document.createElement('div');
   host.className = 'flotter-reply-translator-host';
+  // Force full-width block so flex-column parents (buffer reply form) don't
+  // shrink the host to its content's intrinsic min-width, which would wrap
+  // every Korean character onto its own line.
+  host.style.display = 'block';
+  host.style.width = '100%';
+  host.style.minWidth = '0';
   const stop = (e: Event) => e.stopPropagation();
   host.addEventListener('click', stop);
   host.addEventListener('pointerdown', stop);
@@ -60,7 +79,12 @@ export function mountReplyTranslatorUI(composeEl: HTMLElement): ReplyTranslatorH
   shadow.appendChild(row);
   shadow.appendChild(result);
 
-  composeEl.parentNode?.insertBefore(host, composeEl.nextSibling);
+  const target: MountTarget = mountTarget ?? { el: composeEl, position: 'after' };
+  if (target.position === 'append') {
+    target.el.appendChild(host);
+  } else {
+    target.el.parentNode?.insertBefore(host, target.el.nextSibling);
+  }
 
   function ensureResultText(): Text {
     if (resultText.parentNode !== result) {

@@ -1,3 +1,4 @@
+import { COMPOSE_LANG_OPTIONS, LANG_OPTIONS } from '@/lib/prompts';
 import { type Settings, loadSettings, saveSettings } from '@/lib/storage';
 import { useEffect, useState } from 'react';
 import { ClaudeStatus } from './components/ClaudeStatus';
@@ -32,8 +33,18 @@ export function App() {
       <div className="card">
         <h2>⚙ Settings</h2>
         <LanguageSelector
+          id="post-lang"
+          label="번역 대상 언어 (Bluesky 게시물 읽기)"
+          options={LANG_OPTIONS}
           value={settings.targetLang}
           onChange={(v) => void patch({ targetLang: v })}
+        />
+        <LanguageSelector
+          id="buffer-lang"
+          label="Buffer 작성 번역 언어"
+          options={COMPOSE_LANG_OPTIONS}
+          value={settings.bufferTargetLang}
+          onChange={(v) => void patch({ bufferTargetLang: v })}
         />
       </div>
 

@@ -1,4 +1,6 @@
-export type TargetLang = 'ko' | 'ja' | 'zh';
+// 'en' added in v0.0.3 for Buffer compose mode (user writes in their own language,
+// translates outward to publish in English).
+export type TargetLang = 'ko' | 'ja' | 'zh' | 'en';
 
 export type Request =
   | { type: 'translate'; mode: 'post'; text: string; targetLang: TargetLang }
