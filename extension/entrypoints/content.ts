@@ -1,8 +1,15 @@
 import { dbg } from '@/lib/debug';
 import {
+  extractBufferCommentText,
+  findBufferComments,
   findBufferComposers,
+  findBufferReplyForm,
+  isBufferCommentProcessed,
   isBufferComposerProcessed,
+  isBufferReplyFormProcessed,
+  markBufferCommentProcessed,
   markBufferComposerProcessed,
+  markBufferReplyFormProcessed,
 } from '@/lib/buffer-detector';
 import {
   findNewPostComposer,
@@ -18,21 +25,37 @@ import { extractPostText, findUnprocessedPosts, markProcessed } from '@/lib/post
 import { type ComposeTargetLang, type TargetLang, loadSettings, onSettingsChange } from '@/lib/storage';
 import { extractBskyTokens } from '@/lib/theme';
 
-// Bluesky's compose box is a ProseMirror (tiptap) contenteditable. Setting
-// textContent directly doesn't sync with the editor's internal state, so the
-// posted reply ignores the change. We simulate a paste event with translated
-// text after selecting all existing content; ProseMirror handles paste and
-// updates its state, which feeds into the reply submission.
-function applyTranslationToCompose(composeEl: HTMLElement, text: string): void {
-  composeEl.focus();
-  const sel = composeEl.ownerDocument.defaultView?.getSelection?.();
+// Bluesky's compose box is a ProseMirror (tiptap) contenteditable. Buffer's
+// publish composer is a Slate.js contenteditable. Buffer community reply form
+// is a native <textarea> (React-controlled). Each needs a different injection
+// strategy so the host React/editor state stays in sync.
+function applyTranslationToCompose(el: HTMLElement, text: string): void {
+  // Path A — native <textarea> / <input> (React controlled component).
+  // Setting .value directly bypasses React's setter; we must use the prototype's
+  // setter via Object.getOwnPropertyDescriptor so React picks up the change.
+  if (el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement) {
+    el.focus();
+    const proto =
+      el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+    if (setter) {
+      setter.call(el, text);
+    } else {
+      el.value = text;
+    }
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    return;
+  }
+  // Path B — contenteditable (ProseMirror / Slate / vanilla). select-all +
+  // paste event so the editor's own handler integrates it into its state.
+  el.focus();
+  const sel = el.ownerDocument.defaultView?.getSelection?.();
   if (sel) {
-    const range = composeEl.ownerDocument.createRange();
-    range.selectNodeContents(composeEl);
+    const range = el.ownerDocument.createRange();
+    range.selectNodeContents(el);
     sel.removeAllRanges();
     sel.addRange(range);
   }
-  // Some environments lack DataTransfer constructor (test). Guard.
   try {
     const dt = new DataTransfer();
     dt.setData('text/plain', text);
@@ -41,14 +64,12 @@ function applyTranslationToCompose(composeEl: HTMLElement, text: string): void {
       bubbles: true,
       cancelable: true,
     });
-    composeEl.dispatchEvent(evt);
+    el.dispatchEvent(evt);
   } catch {
-    // Fallback: legacy execCommand. Deprecated but widely supported and ProseMirror handles it.
     try {
-      composeEl.ownerDocument.execCommand('insertText', false, text);
+      el.ownerDocument.execCommand('insertText', false, text);
     } catch {
-      // last resort — direct text content (will not sync to ProseMirror state)
-      composeEl.textContent = text;
+      el.textContent = text;
     }
   }
 }
@@ -380,6 +401,159 @@ export default defineContentScript({
           mountedBuffer.delete(el);
         }
       }
+      // Community comment thread: each comment gets a translate-on-read UI,
+      // and the reply form (if present) gets a translate-on-compose UI that
+      // targets the parent comment's language.
+      for (const c of findBufferComments(document)) attachBufferComment(c);
+      for (const [el, h] of mountedBufferComments) {
+        if (!el.isConnected) {
+          h.destroy();
+          mountedBufferComments.delete(el);
+        }
+      }
+      const replyForm = findBufferReplyForm(document);
+      if (replyForm) attachBufferReplyForm(replyForm);
+      for (const [el, h] of mountedBufferReplyForms) {
+        if (!el.isConnected) {
+          h.destroy();
+          mountedBufferReplyForms.delete(el);
+        }
+      }
+    }
+
+    // --- Buffer community: comment reading (foreign → user's targetLang) ---
+    const mountedBufferComments = new Map<HTMLElement, ReplyTranslatorHandle>();
+
+    function attachBufferComment(commentEl: HTMLElement): void {
+      if (isBufferCommentProcessed(commentEl)) return;
+      const extracted = extractBufferCommentText(commentEl);
+      if (!extracted) return;
+      const text: string = extracted; // capture as non-null for closure
+      markBufferCommentProcessed(commentEl);
+      // Mount as the last child of the comment article — out of the flex row
+      // that contains avatar+content, so it sits on its own line below.
+      const handle = mountReplyTranslatorUI(commentEl, { el: commentEl, position: 'append' });
+      setThemeTokens(handle.host, extractBskyTokens());
+      mountedBufferComments.set(commentEl, handle);
+
+      // Reading direction: don't show the "반영하기" button — it doesn't make
+      // sense to write a translation back into someone else's comment.
+      // We can't fully hide showApply from the widget, but we simply never
+      // call it; trigger only fires translate → preview.
+      let abortCtl: AbortController | null = null;
+
+      function runCommentTranslate(): void {
+        const targetLang = settings.targetLang; // reading direction (default ko)
+        handle.reset();
+        handle.show();
+        abortCtl?.abort();
+        abortCtl = new AbortController();
+        let acc = '';
+        const hangTimer = setTimeout(() => {
+          if (acc.length === 0) handle.appendChunk('응답 지연 중...');
+        }, 15_000);
+        translateViaBackground(
+          { type: 'translate', mode: 'post', text, targetLang },
+          (chunk) => {
+            if (acc.length === 0) handle.reset();
+            acc += chunk;
+            handle.appendChunk(chunk);
+          },
+          () => {
+            clearTimeout(hangTimer);
+            // intentionally no showApply for reading direction
+          },
+          (e) => {
+            clearTimeout(hangTimer);
+            let msg: string;
+            if (e.code === 'claude_not_found')
+              msg = 'claude CLI 미설치. `npm i -g @anthropic-ai/claude-code`.';
+            else if (e.code === 'claude_auth') msg = 'claude 로그인 필요. 터미널에서 `claude login`.';
+            else msg = `번역 실패 — ${e.message}.`;
+            handle.showError(msg, () => runCommentTranslate());
+          },
+          abortCtl.signal,
+        );
+      }
+
+      handle.trigger.addEventListener('click', () => runCommentTranslate());
+    }
+
+    // --- Buffer community: reply form (user's KO → parent comment's language) ---
+    const mountedBufferReplyForms = new Map<HTMLElement, ReplyTranslatorHandle>();
+
+    function attachBufferReplyForm(hit: ReturnType<typeof findBufferReplyForm>): void {
+      if (!hit) return;
+      const { formEl, textarea, footer, parentComment } = hit;
+      if (isBufferReplyFormProcessed(formEl)) return;
+      markBufferReplyFormProcessed(formEl);
+      // Prefer to mount inside the replyFooter (next to the emoji/draft icons).
+      // If footer isn't found, fall back to the form's last child.
+      const targetEl = footer ?? formEl;
+      const position: 'append' | 'after' = footer ? 'append' : 'after';
+      const handle = mountReplyTranslatorUI(textarea, { el: targetEl, position });
+      setThemeTokens(handle.host, extractBskyTokens());
+      mountedBufferReplyForms.set(formEl, handle);
+
+      let abortCtl: AbortController | null = null;
+
+      function runReplyFormTranslate(): void {
+        const reply = textarea.value.trim();
+        if (!reply) {
+          handle.showError('내용을 먼저 작성하세요.', () => runReplyFormTranslate());
+          return;
+        }
+        const originalPost = parentComment ? extractBufferCommentText(parentComment) : null;
+        if (!originalPost) {
+          // No parent comment to derive language from — fall back to bufferTargetLang.
+          const targetLang = settings.bufferTargetLang;
+          translateAndApply({ type: 'translate', mode: 'post', text: reply, targetLang });
+          return;
+        }
+        translateAndApply({ type: 'translate', mode: 'reply', originalPost, reply });
+      }
+
+      function translateAndApply(
+        payload:
+          | { type: 'translate'; mode: 'post'; text: string; targetLang: TargetLang | ComposeTargetLang }
+          | { type: 'translate'; mode: 'reply'; originalPost: string; reply: string },
+      ): void {
+        handle.reset();
+        handle.show();
+        abortCtl?.abort();
+        abortCtl = new AbortController();
+        let acc = '';
+        const hangTimer = setTimeout(() => {
+          if (acc.length === 0) handle.appendChunk('응답 지연 중...');
+        }, 15_000);
+        translateViaBackground(
+          payload,
+          (chunk) => {
+            if (acc.length === 0) handle.reset();
+            acc += chunk;
+            handle.appendChunk(chunk);
+          },
+          () => {
+            clearTimeout(hangTimer);
+            if (acc.length > 0) {
+              const translated = acc;
+              handle.showApply(() => applyTranslationToCompose(textarea, translated));
+            }
+          },
+          (e) => {
+            clearTimeout(hangTimer);
+            let msg: string;
+            if (e.code === 'claude_not_found')
+              msg = 'claude CLI 미설치. `npm i -g @anthropic-ai/claude-code`.';
+            else if (e.code === 'claude_auth') msg = 'claude 로그인 필요. 터미널에서 `claude login`.';
+            else msg = `번역 실패 — ${e.message}.`;
+            handle.showError(msg, () => runReplyFormTranslate());
+          },
+          abortCtl.signal,
+        );
+      }
+
+      handle.trigger.addEventListener('click', () => runReplyFormTranslate());
     }
 
     function scan(root: ParentNode): void {
