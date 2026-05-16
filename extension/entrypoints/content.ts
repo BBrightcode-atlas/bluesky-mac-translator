@@ -484,14 +484,15 @@ export default defineContentScript({
 
     function attachBufferReplyForm(hit: ReturnType<typeof findBufferReplyForm>): void {
       if (!hit) return;
-      const { formEl, textarea, footer, parentComment } = hit;
+      const { formEl, textarea, parentComment } = hit;
       if (isBufferReplyFormProcessed(formEl)) return;
       markBufferReplyFormProcessed(formEl);
-      // Prefer to mount inside the replyFooter (next to the emoji/draft icons).
-      // If footer isn't found, fall back to the form's last child.
-      const targetEl = footer ?? formEl;
-      const position: 'append' | 'after' = footer ? 'append' : 'after';
-      const handle = mountReplyTranslatorUI(textarea, { el: targetEl, position });
+      // Mount under the reply form (form's last child) — not inside the footer
+      // toolbar. The toolbar is a `publish_nowrap` flex row, so our host being
+      // a row item squeezes the character counter ("0/280") into vertical
+      // letters when the translation result expands. Placing the host as a
+      // new line below the footer keeps the toolbar layout intact.
+      const handle = mountReplyTranslatorUI(textarea, { el: formEl, position: 'append' });
       setThemeTokens(handle.host, extractBskyTokens());
       mountedBufferReplyForms.set(formEl, handle);
 
