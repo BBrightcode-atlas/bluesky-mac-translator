@@ -31,6 +31,12 @@ export function mountReplyTranslatorUI(
 ): ReplyTranslatorHandle {
   const host = document.createElement('div');
   host.className = 'flotter-reply-translator-host';
+  // Force full-width block so flex-column parents (buffer reply form) don't
+  // shrink the host to its content's intrinsic min-width, which would wrap
+  // every Korean character onto its own line.
+  host.style.display = 'block';
+  host.style.width = '100%';
+  host.style.minWidth = '0';
   const stop = (e: Event) => e.stopPropagation();
   host.addEventListener('click', stop);
   host.addEventListener('pointerdown', stop);
