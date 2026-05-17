@@ -234,6 +234,11 @@ NMH host의 `claude-spawn.ts` 한 곳만 다른 명령으로 교체하면 됩니
 
 [MIT](LICENSE)
 
+## Releases / Changelog
+
+- [최신 릴리스 (zip 다운로드)](https://github.com/bbrightcode-atlas/bluesky-mac-translator/releases/latest)
+- [CHANGELOG.md](CHANGELOG.md)
+
 ## 기여
 
 이슈 / PR 환영: https://github.com/bbrightcode-atlas/bluesky-mac-translator
